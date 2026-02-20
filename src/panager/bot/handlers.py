@@ -84,7 +84,4 @@ async def handle_dm(message: discord.Message, bot, graph) -> None:
         "timezone": "Asia/Seoul",
     }
 
-    async with message.channel.typing():
-        result = await graph.ainvoke(state, config=config)
-        response = result["messages"][-1].content
-        await message.channel.send(response)
+    await _stream_agent_response(graph, state, config, message.channel)
