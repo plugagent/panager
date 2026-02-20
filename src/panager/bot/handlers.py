@@ -33,6 +33,8 @@ async def _stream_agent_response(graph, state: dict, config: dict, channel) -> N
             continue
         if not chunk.content:
             continue
+        if not isinstance(chunk.content, str):
+            continue
 
         accumulated += chunk.content
 

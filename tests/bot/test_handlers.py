@@ -54,7 +54,7 @@ async def test_stream_empty_response_sends_fallback():
     await _stream_agent_response(mock_graph, state, config, mock_channel)
 
     # 빈 스트림 → channel.send로 fallback 메시지 전송 (sent_message 없으므로)
-    mock_channel.send.assert_called_once()
+    mock_channel.send.assert_called_once_with("(응답을 받지 못했습니다.)")
 
 
 @pytest.mark.asyncio
