@@ -51,19 +51,23 @@ def make_event_list(user_id: int):
         time_min = now.isoformat()
         time_max = (now + timedelta(days=days_ahead)).isoformat()
 
-        calendars = (await _execute(service.calendarList().list())).get("items", [])
+        calendars_result = await _execute(service.calendarList().list()) or {}
+        calendars = calendars_result.get("items", [])
         events: list[str] = []
 
         for cal in calendars:
             cal_id = cal["id"]
-            result = await _execute(
-                service.events().list(
-                    calendarId=cal_id,
-                    timeMin=time_min,
-                    timeMax=time_max,
-                    singleEvents=True,
-                    orderBy="startTime",
+            result = (
+                await _execute(
+                    service.events().list(
+                        calendarId=cal_id,
+                        timeMin=time_min,
+                        timeMax=time_max,
+                        singleEvents=True,
+                        orderBy="startTime",
+                    )
                 )
+                or {}
             )
             for evt in result.get("items", []):
                 start = evt.get("start", {}).get("dateTime") or evt.get(
@@ -101,8 +105,9 @@ def make_event_create(user_id: int):
         if description:
             body["description"] = description
 
-        created = await _execute(
-            service.events().insert(calendarId=calendar_id, body=body)
+        created = (
+            await _execute(service.events().insert(calendarId=calendar_id, body=body))
+            or {}
         )
         return f"이벤트가 추가되었습니다: {created.get('summary')} (id={created.get('id')})"
 
