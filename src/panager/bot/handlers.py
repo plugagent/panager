@@ -38,9 +38,10 @@ async def _stream_agent_response(graph, state: dict, config: dict, channel) -> N
 
         accumulated += chunk.content
 
-        # 첫 토큰: 초기 메시지 전송
+        # 첫 토큰: 초기 메시지 전송 후 타이머 시작 (전송 직후부터 디바운스 측정)
         if sent_message is None:
             sent_message = await channel.send("▌")
+            last_edit_at = time.monotonic()
 
         # 디바운스: 마지막 edit 이후 DEBOUNCE 초 이상 경과 시에만 edit
         now = time.monotonic()
