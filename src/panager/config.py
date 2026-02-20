@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     log_max_bytes: int = 10_485_760
     log_backup_count: int = 5
 
+    # Checkpoint
+    checkpoint_max_tokens: int = 4000  # LLM에 전달할 messages 최대 토큰 수
+    checkpoint_ttl_days: int = 30  # checkpoint 보관 기간 (일)
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
