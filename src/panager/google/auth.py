@@ -9,7 +9,10 @@ from google.auth.transport.requests import Request
 
 from panager.config import Settings
 
-SCOPES = ["https://www.googleapis.com/auth/tasks"]
+SCOPES = [
+    "https://www.googleapis.com/auth/tasks",
+    "https://www.googleapis.com/auth/calendar",
+]
 
 
 @lru_cache
