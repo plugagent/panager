@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Literal
 
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage, trim_messages
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
@@ -66,6 +66,7 @@ _WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
 
 async def _agent_node(state: AgentState) -> dict:
+    settings = _get_settings()
     user_id = state["user_id"]
     tz_name = state.get("timezone", "Asia/Seoul")
     try:
@@ -89,7 +90,16 @@ async def _agent_node(state: AgentState) -> dict:
         f"예: {now.strftime('%Y')}-MM-DDTHH:MM:SS{utc_offset}\n\n"
         f"관련 메모리:\n{state.get('memory_context', '없음')}"
     )
-    messages = [SystemMessage(content=system_prompt)] + state["messages"]
+    trimmed_messages = trim_messages(
+        state["messages"],
+        max_tokens=settings.checkpoint_max_tokens,
+        strategy="last",
+        token_counter="approximate",
+        include_system=False,
+        allow_partial=False,
+        start_on="human",
+    )
+    messages = [SystemMessage(content=system_prompt)] + trimmed_messages
     response = await llm.ainvoke(messages)
     return {"messages": [response]}
 
