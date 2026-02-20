@@ -22,8 +22,9 @@ async def _stream_agent_response(graph, state: dict, config: dict, channel) -> N
     - 200ms 디바운스로 edit() 호출 (rate limit 대응)
     - 스트림 종료 후 커서 제거한 최종 텍스트로 edit()
     """
+    # LLM 응답 전에 즉시 대기 문구 전송
+    sent_message = await channel.send("생각하는 중...")
     accumulated = ""
-    sent_message = None
     last_edit_at = 0.0
 
     async for chunk, _metadata in graph.astream(
@@ -38,11 +39,6 @@ async def _stream_agent_response(graph, state: dict, config: dict, channel) -> N
 
         accumulated += chunk.content
 
-        # 첫 토큰: 초기 메시지 전송 후 타이머 시작 (전송 직후부터 디바운스 측정)
-        if sent_message is None:
-            sent_message = await channel.send("▌")
-            last_edit_at = time.monotonic()
-
         # 디바운스: 마지막 edit 이후 DEBOUNCE 초 이상 경과 시에만 edit
         now = time.monotonic()
         if now - last_edit_at >= STREAM_DEBOUNCE:
@@ -51,11 +47,7 @@ async def _stream_agent_response(graph, state: dict, config: dict, channel) -> N
 
     # 최종 edit: 커서 제거
     final_text = accumulated.strip() or "(응답을 받지 못했습니다.)"
-    if sent_message is None:
-        # 스트림이 완전히 비어있는 경우
-        await channel.send(final_text)
-    else:
-        await sent_message.edit(content=final_text)
+    await sent_message.edit(content=final_text)
 
 
 async def handle_dm(message: discord.Message, bot, graph) -> None:
