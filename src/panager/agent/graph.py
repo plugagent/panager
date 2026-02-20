@@ -61,12 +61,22 @@ def _build_tools(user_id: int) -> list:
     ]
 
 
+_WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
+
+
 async def _agent_node(state: AgentState) -> dict:
     user_id = state["user_id"]
     tz_name = state.get("timezone", "Asia/Seoul")
-    tz = zoneinfo.ZoneInfo(tz_name)
+    try:
+        tz = zoneinfo.ZoneInfo(tz_name)
+    except zoneinfo.ZoneInfoNotFoundError:
+        tz_name = "Asia/Seoul"
+        tz = zoneinfo.ZoneInfo(tz_name)
     now = datetime.now(tz)
-    now_str = now.strftime("%Y년 %m월 %d일 (%A) %H:%M")
+    weekday_ko = _WEEKDAY_KO[now.weekday()]
+    utc_offset_raw = now.strftime("%z")  # e.g. "+0900"
+    utc_offset = f"{utc_offset_raw[:3]}:{utc_offset_raw[3:]}"  # "+09:00"
+    now_str = now.strftime(f"%Y년 %m월 %d일 ({weekday_ko}) %H:%M")
 
     tools = _build_tools(user_id)
     llm = _get_llm().bind_tools(tools)
@@ -75,7 +85,7 @@ async def _agent_node(state: AgentState) -> dict:
         "사용자의 할 일, 일정, 메모리를 관리하고 적극적으로 도와주세요.\n\n"
         f"현재 날짜/시간: {now_str} ({tz_name})\n"
         "날짜/시간 관련 요청은 반드시 위 현재 시각 기준으로 ISO 8601 형식으로 변환하세요. "
-        f"예: {now.strftime('%Y')}-MM-DDTHH:MM:SS+09:00\n\n"
+        f"예: {now.strftime('%Y')}-MM-DDTHH:MM:SS{utc_offset}\n\n"
         f"관련 메모리:\n{state.get('memory_context', '없음')}"
     )
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
