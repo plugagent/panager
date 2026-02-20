@@ -5,6 +5,11 @@ from uuid import UUID
 from panager.db.connection import get_pool
 
 
+def _format_embedding(embedding: list[float]) -> str:
+    """부동소수점 벡터를 pgvector 호환 텍스트 형식으로 변환."""
+    return "[" + ",".join(repr(x) for x in embedding) + "]"
+
+
 async def save_memory(user_id: int, content: str, embedding: list[float]) -> UUID:
     pool = get_pool()
     async with pool.acquire() as conn:
@@ -16,8 +21,12 @@ async def save_memory(user_id: int, content: str, embedding: list[float]) -> UUI
             """,
             user_id,
             content,
-            str(embedding),
+            _format_embedding(embedding),
         )
+        if row is None:
+            raise RuntimeError(
+                "INSERT INTO memories RETURNING id가 행을 반환하지 않았습니다."
+            )
         return UUID(str(row["id"]))
 
 
@@ -35,7 +44,7 @@ async def search_memories(
             LIMIT $3
             """,
             user_id,
-            str(embedding),
+            _format_embedding(embedding),
             limit,
         )
         return [row["content"] for row in rows]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import zoneinfo
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -30,6 +31,8 @@ def make_schedule_create(user_id: int, bot: Any = None):
     async def schedule_create(message: str, trigger_at: str) -> str:
         """지정한 시간에 사용자에게 DM 알림을 예약합니다."""
         trigger_dt = datetime.fromisoformat(trigger_at)
+        if trigger_dt.tzinfo is None:
+            trigger_dt = trigger_dt.replace(tzinfo=zoneinfo.ZoneInfo("Asia/Seoul"))
         pool = get_pool()
         async with pool.acquire() as conn:
             schedule_id = await conn.fetchval(
@@ -98,6 +101,8 @@ class _ScheduleCancelInputLegacy(BaseModel):
 async def schedule_create(message: str, trigger_at: str, user_id: int) -> str:
     """지정한 시간에 사용자에게 DM 알림을 예약합니다."""
     trigger_dt = datetime.fromisoformat(trigger_at)
+    if trigger_dt.tzinfo is None:
+        trigger_dt = trigger_dt.replace(tzinfo=zoneinfo.ZoneInfo("Asia/Seoul"))
     pool = get_pool()
     async with pool.acquire() as conn:
         schedule_id = await conn.fetchval(

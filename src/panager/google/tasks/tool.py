@@ -31,12 +31,12 @@ def make_task_list(user_id: int):
         """Google Tasks의 할 일 목록을 조회합니다."""
         creds = await _get_valid_credentials(user_id)
         service = _build_service(creds)
-        result = await _execute(service.tasks().list(tasklist="@default"))
+        result = await _execute(service.tasks().list(tasklist="@default")) or {}
         items = result.get("items", [])
         if not items:
             return "할 일이 없습니다."
         pending = [
-            f"- [{item['id']}] {item['title']}"
+            f"- [{item['id']}] {item.get('title', '(제목 없음)')}"
             for item in items
             if item.get("status") == "needsAction"
         ]
