@@ -23,13 +23,13 @@ async def test_event_list_returns_events():
 
     with (
         patch(
-            "panager.google.tool._get_valid_credentials",
+            "panager.google.credentials._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
-        patch("panager.google.tool._build_calendar_service", return_value=mock_service),
+        patch("panager.google.calendar.tool._build_service", return_value=mock_service),
     ):
-        from panager.google.tool import make_event_list
+        from panager.google.calendar.tool import make_event_list
 
         tool = make_event_list(user_id=123)
         result = await tool.ainvoke({"days_ahead": 7})
@@ -48,13 +48,13 @@ async def test_event_list_no_events():
 
     with (
         patch(
-            "panager.google.tool._get_valid_credentials",
+            "panager.google.credentials._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
-        patch("panager.google.tool._build_calendar_service", return_value=mock_service),
+        patch("panager.google.calendar.tool._build_service", return_value=mock_service),
     ):
-        from panager.google.tool import make_event_list
+        from panager.google.calendar.tool import make_event_list
 
         tool = make_event_list(user_id=123)
         result = await tool.ainvoke({"days_ahead": 7})
@@ -72,13 +72,13 @@ async def test_event_create():
 
     with (
         patch(
-            "panager.google.tool._get_valid_credentials",
+            "panager.google.credentials._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
-        patch("panager.google.tool._build_calendar_service", return_value=mock_service),
+        patch("panager.google.calendar.tool._build_service", return_value=mock_service),
     ):
-        from panager.google.tool import make_event_create
+        from panager.google.calendar.tool import make_event_create
 
         tool = make_event_create(user_id=123)
         result = await tool.ainvoke(
@@ -106,13 +106,13 @@ async def test_event_update():
 
     with (
         patch(
-            "panager.google.tool._get_valid_credentials",
+            "panager.google.credentials._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
-        patch("panager.google.tool._build_calendar_service", return_value=mock_service),
+        patch("panager.google.calendar.tool._build_service", return_value=mock_service),
     ):
-        from panager.google.tool import make_event_update
+        from panager.google.calendar.tool import make_event_update
 
         tool = make_event_update(user_id=123)
         result = await tool.ainvoke(
@@ -135,13 +135,13 @@ async def test_event_update_no_fields():
 
     with (
         patch(
-            "panager.google.tool._get_valid_credentials",
+            "panager.google.credentials._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
-        patch("panager.google.tool._build_calendar_service", return_value=mock_service),
+        patch("panager.google.calendar.tool._build_service", return_value=mock_service),
     ):
-        from panager.google.tool import make_event_update
+        from panager.google.calendar.tool import make_event_update
 
         tool = make_event_update(user_id=123)
         result = await tool.ainvoke(
@@ -162,13 +162,13 @@ async def test_event_delete():
 
     with (
         patch(
-            "panager.google.tool._get_valid_credentials",
+            "panager.google.credentials._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
-        patch("panager.google.tool._build_calendar_service", return_value=mock_service),
+        patch("panager.google.calendar.tool._build_service", return_value=mock_service),
     ):
-        from panager.google.tool import make_event_delete
+        from panager.google.calendar.tool import make_event_delete
 
         tool = make_event_delete(user_id=123)
         result = await tool.ainvoke(

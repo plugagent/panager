@@ -16,13 +16,14 @@ async def test_task_list_tool():
 
     with (
         patch(
-            "panager.google.tool.get_tokens",
+            "panager.google.credentials.get_tokens",
             new_callable=AsyncMock,
             return_value=mock_tokens,
         ),
-        patch("panager.google.tool._build_service", return_value=mock_service),
+        patch("panager.google.tasks.tool._build_service", return_value=mock_service),
     ):
-        from panager.google.tool import task_list
+        from panager.google.tasks.tool import make_task_list
 
-        result = await task_list.ainvoke({"user_id": 123})
+        tool = make_task_list(user_id=123)
+        result = await tool.ainvoke({})
         assert "테스트 할 일" in result
