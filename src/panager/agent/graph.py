@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import zoneinfo
 from datetime import datetime
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage, trim_messages
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+    trim_messages,
+)
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
@@ -33,7 +40,7 @@ def _get_llm() -> ChatOpenAI:
     )
 
 
-def _build_tools(user_id: int) -> list:
+def _build_tools(user_id: int, bot: Any = None) -> list:
     """user_id를 클로저로 포함한 tool 인스턴스 목록을 반환합니다."""
     from panager.google.tasks.tool import (
         make_task_complete,
@@ -50,7 +57,7 @@ def _build_tools(user_id: int) -> list:
     return [
         make_memory_save(user_id),
         make_memory_search(user_id),
-        make_schedule_create(user_id),
+        make_schedule_create(user_id, bot),
         make_schedule_cancel(user_id),
         make_task_create(user_id),
         make_task_list(user_id),
@@ -65,7 +72,7 @@ def _build_tools(user_id: int) -> list:
 _WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
 
-async def _agent_node(state: AgentState) -> dict:
+async def _agent_node(state: AgentState, bot: Any = None) -> dict:
     settings = _get_settings()
     user_id = state["user_id"]
     tz_name = state.get("timezone", "Asia/Seoul")
@@ -80,7 +87,7 @@ async def _agent_node(state: AgentState) -> dict:
     utc_offset = f"{utc_offset_raw[:3]}:{utc_offset_raw[3:]}"  # "+09:00"
     now_str = now.strftime(f"%Y년 %m월 %d일 ({weekday_ko}) %H:%M")
 
-    tools = _build_tools(user_id)
+    tools = _build_tools(user_id, bot)
     llm = _get_llm().bind_tools(tools)
     system_prompt = (
         f"당신은 {state['username']}의 개인 매니저 패니저입니다. "
@@ -106,8 +113,10 @@ async def _agent_node(state: AgentState) -> dict:
 
 def _make_tool_node(bot):
     async def _tool_node(state: AgentState) -> dict:
+        if not state["messages"]:
+            return {"messages": []}
         user_id = state["user_id"]
-        tools = _build_tools(user_id)
+        tools = _build_tools(user_id, bot)
         tool_map = {t.name: t for t in tools}
 
         last_message = state["messages"][-1]
@@ -126,7 +135,15 @@ def _make_tool_node(bot):
                 except GoogleAuthRequired:
                     # 원래 요청을 pending에 저장하고 인증 URL 안내
                     if bot is not None:
-                        original = state["messages"][0].content
+                        original = next(
+                            (
+                                m.content
+                                for m in reversed(state["messages"])
+                                if isinstance(m, HumanMessage)
+                                and isinstance(m.content, str)
+                            ),
+                            "",
+                        )
                         bot.pending_messages[user_id] = original
                     auth_url = get_auth_url(user_id)
                     result = (
@@ -144,6 +161,8 @@ def _make_tool_node(bot):
 
 
 def _should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+    if not state["messages"]:
+        return END
     last_message = state["messages"][-1]
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "tools"
@@ -152,7 +171,8 @@ def _should_continue(state: AgentState) -> Literal["tools", "__end__"]:
 
 def build_graph(checkpointer, bot=None) -> object:
     graph = StateGraph(AgentState)
-    graph.add_node("agent", _agent_node)
+    agent_node = functools.partial(_agent_node, bot=bot)
+    graph.add_node("agent", agent_node)
     graph.add_node("tools", _make_tool_node(bot))
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", _should_continue)

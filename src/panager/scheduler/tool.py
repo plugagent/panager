@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from langchain_core.tools import tool
@@ -24,7 +25,7 @@ class ScheduleCancelInput(BaseModel):
     schedule_id: str
 
 
-def make_schedule_create(user_id: int):
+def make_schedule_create(user_id: int, bot: Any = None):
     @tool(args_schema=ScheduleCreateInput)
     async def schedule_create(message: str, trigger_at: str) -> str:
         """지정한 시간에 사용자에게 DM 알림을 예약합니다."""
@@ -47,7 +48,7 @@ def make_schedule_create(user_id: int):
             send_scheduled_dm,
             "date",
             run_date=trigger_dt,
-            args=[None, user_id, str(schedule_id), message],
+            args=[bot, user_id, str(schedule_id), message],
             id=str(schedule_id),
             replace_existing=True,
         )
