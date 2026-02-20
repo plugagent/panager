@@ -5,6 +5,7 @@ import logging
 
 import discord
 import psycopg
+import uvicorn
 from discord import app_commands
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
@@ -29,6 +30,8 @@ class PanagerBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
         self.graph = None
         self._pg_conn: psycopg.AsyncConnection | None = None
+        self.auth_complete_queue: asyncio.Queue = asyncio.Queue()
+        self.pending_messages: dict[int, str] = {}
 
     async def setup_hook(self) -> None:
         await init_pool(settings.postgres_dsn_asyncpg)
@@ -38,7 +41,7 @@ class PanagerBot(discord.Client):
         )
         checkpointer = AsyncPostgresSaver(self._pg_conn)
         await checkpointer.setup()
-        self.graph = build_graph(checkpointer)
+        self.graph = build_graph(checkpointer, bot=self)
 
         register_commands(self, self.tree)
         await self.tree.sync()
@@ -46,7 +49,47 @@ class PanagerBot(discord.Client):
         scheduler = get_scheduler()
         scheduler.start()
         await restore_pending_schedules(self)
+
+        # FastAPI를 같은 이벤트 루프에서 실행
+        asyncio.create_task(self._run_api())
+        # 인증 완료 큐 처리 백그라운드 태스크
+        asyncio.create_task(self._process_auth_queue())
+
         log.info("봇 설정 완료")
+
+    async def _run_api(self) -> None:
+        from panager.api.main import create_app
+
+        app = create_app(self)
+        config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="warning")
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    async def _process_auth_queue(self) -> None:
+        while True:
+            event = await self.auth_complete_queue.get()
+            user_id: int = event["user_id"]
+            pending_message: str | None = self.pending_messages.pop(user_id, None)
+            if not pending_message:
+                continue
+            try:
+                user = await self.fetch_user(user_id)
+                dm = await user.create_dm()
+                from langchain_core.messages import HumanMessage
+
+                config = {"configurable": {"thread_id": str(user_id)}}
+                state = {
+                    "user_id": user_id,
+                    "username": str(user),
+                    "messages": [HumanMessage(content=pending_message)],
+                    "memory_context": "",
+                }
+                async with dm.typing():
+                    result = await self.graph.ainvoke(state, config=config)
+                    response = result["messages"][-1].content
+                    await dm.send(response)
+            except Exception as exc:
+                log.exception("인증 후 재실행 실패: %s", exc)
 
     async def on_ready(self) -> None:
         log.info("봇 시작 완료: %s", str(self.user))
