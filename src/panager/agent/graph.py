@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from functools import lru_cache
 from typing import Literal
 
@@ -9,15 +10,16 @@ from langgraph.graph import END, START, StateGraph
 
 from panager.agent.state import AgentState
 from panager.config import Settings
+from panager.google.auth import get_auth_url
 from panager.google.tool import (
     GoogleAuthRequired,
+    make_event_create,
+    make_event_delete,
+    make_event_list,
+    make_event_update,
     make_task_complete,
     make_task_create,
     make_task_list,
-    make_event_list,
-    make_event_create,
-    make_event_update,
-    make_event_delete,
 )
 from panager.memory.tool import make_memory_save, make_memory_search
 from panager.scheduler.tool import make_schedule_cancel, make_schedule_create
@@ -68,33 +70,43 @@ async def _agent_node(state: AgentState) -> dict:
     return {"messages": [response]}
 
 
-async def _tool_node(state: AgentState) -> dict:
-    """user_id 클로저 툴을 동적으로 생성하여 tool_calls를 처리합니다."""
-    user_id = state["user_id"]
-    tools = _build_tools(user_id)
-    tool_map = {t.name: t for t in tools}
+def _make_tool_node(bot):
+    async def _tool_node(state: AgentState) -> dict:
+        user_id = state["user_id"]
+        tools = _build_tools(user_id)
+        tool_map = {t.name: t for t in tools}
 
-    last_message = state["messages"][-1]
-    tool_messages: list[ToolMessage] = []
+        last_message = state["messages"][-1]
+        tool_messages: list[ToolMessage] = []
 
-    for tool_call in last_message.tool_calls:
-        tool_name = tool_call["name"]
-        tool_args = tool_call["args"]
-        tool_id = tool_call["id"]
+        for tool_call in last_message.tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            tool_id = tool_call["id"]
 
-        if tool_name not in tool_map:
-            result = f"알 수 없는 툴: {tool_name}"
-        else:
-            try:
-                result = await tool_map[tool_name].ainvoke(tool_args)
-            except GoogleAuthRequired as exc:
-                result = f"[GOOGLE_AUTH_REQUIRED] {exc}"
-            except Exception as exc:
-                result = f"오류 발생: {exc}"
+            if tool_name not in tool_map:
+                result = f"알 수 없는 툴: {tool_name}"
+            else:
+                try:
+                    result = await tool_map[tool_name].ainvoke(tool_args)
+                except GoogleAuthRequired:
+                    # 원래 요청을 pending에 저장하고 인증 URL 안내
+                    if bot is not None:
+                        original = state["messages"][0].content
+                        bot.pending_messages[user_id] = original
+                    auth_url = get_auth_url(user_id)
+                    result = (
+                        f"Google 계정 연동이 필요합니다.\n"
+                        f"아래 링크에서 연동해주세요:\n{auth_url}"
+                    )
+                except Exception as exc:
+                    result = f"오류 발생: {exc}"
 
-        tool_messages.append(ToolMessage(content=str(result), tool_call_id=tool_id))
+            tool_messages.append(ToolMessage(content=str(result), tool_call_id=tool_id))
 
-    return {"messages": tool_messages}
+        return {"messages": tool_messages}
+
+    return _tool_node
 
 
 def _should_continue(state: AgentState) -> Literal["tools", "__end__"]:
@@ -104,10 +116,10 @@ def _should_continue(state: AgentState) -> Literal["tools", "__end__"]:
     return END
 
 
-def build_graph(checkpointer) -> object:
+def build_graph(checkpointer, bot=None) -> object:
     graph = StateGraph(AgentState)
     graph.add_node("agent", _agent_node)
-    graph.add_node("tools", _tool_node)
+    graph.add_node("tools", _make_tool_node(bot))
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", _should_continue)
     graph.add_edge("tools", "agent")
