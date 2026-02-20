@@ -51,12 +51,12 @@ def make_event_list(user_id: int):
         time_min = now.isoformat()
         time_max = (now + timedelta(days=days_ahead)).isoformat()
 
-        calendars = _execute(service.calendarList().list()).get("items", [])
+        calendars = (await _execute(service.calendarList().list())).get("items", [])
         events: list[str] = []
 
         for cal in calendars:
             cal_id = cal["id"]
-            result = _execute(
+            result = await _execute(
                 service.events().list(
                     calendarId=cal_id,
                     timeMin=time_min,
@@ -101,7 +101,9 @@ def make_event_create(user_id: int):
         if description:
             body["description"] = description
 
-        created = _execute(service.events().insert(calendarId=calendar_id, body=body))
+        created = await _execute(
+            service.events().insert(calendarId=calendar_id, body=body)
+        )
         return f"이벤트가 추가되었습니다: {created.get('summary')} (id={created.get('id')})"
 
     return event_create
@@ -134,7 +136,7 @@ def make_event_update(user_id: int):
         if not patch_body:
             return "수정할 필드를 하나 이상 지정해주세요."
 
-        _execute(
+        await _execute(
             service.events().patch(
                 calendarId=calendar_id, eventId=event_id, body=patch_body
             )
@@ -150,7 +152,9 @@ def make_event_delete(user_id: int):
         """Google Calendar 이벤트를 삭제합니다."""
         creds = await _get_valid_credentials(user_id)
         service = _build_service(creds)
-        _execute(service.events().delete(calendarId=calendar_id, eventId=event_id))
+        await _execute(
+            service.events().delete(calendarId=calendar_id, eventId=event_id)
+        )
         return f"이벤트가 삭제되었습니다: {event_id}"
 
     return event_delete

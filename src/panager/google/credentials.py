@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from google.oauth2.credentials import Credentials
@@ -26,10 +27,10 @@ async def _get_valid_credentials(user_id: int) -> Credentials:
     return Credentials(token=tokens.access_token)
 
 
-def _execute(request):
-    """googleapiclient 요청을 실행하고 401/403은 GoogleAuthRequired로 변환합니다."""
+async def _execute(request) -> dict:
+    """googleapiclient 요청을 비동기로 실행하고 401/403은 GoogleAuthRequired로 변환합니다."""
     try:
-        return request.execute()
+        return await asyncio.to_thread(request.execute)
     except HttpError as exc:
         if exc.status_code in (401, 403):
             raise GoogleAuthRequired("Google 권한이 부족합니다. 재연동이 필요합니다.")

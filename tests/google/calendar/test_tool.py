@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone, timedelta
 
 
 @pytest.mark.asyncio
@@ -18,16 +17,26 @@ async def test_event_list_returns_events():
             }
         ]
     }
-    mock_service.calendarList().list().execute.return_value = mock_calendars
-    mock_service.events().list().execute.return_value = mock_events
+
+    async def fake_execute(request):
+        # calendarList 요청이면 calendars 반환, events 요청이면 events 반환
+        return (
+            mock_calendars
+            if hasattr(request, "_methodId") is False and "calendarList" in str(request)
+            else mock_events
+        )
 
     with (
         patch(
-            "panager.google.credentials._get_valid_credentials",
+            "panager.google.calendar.tool._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
         patch("panager.google.calendar.tool._build_service", return_value=mock_service),
+        patch(
+            "panager.google.calendar.tool._execute",
+            side_effect=[mock_calendars, mock_events],
+        ),
     ):
         from panager.google.calendar.tool import make_event_list
 
@@ -41,18 +50,18 @@ async def test_event_list_returns_events():
 async def test_event_list_no_events():
     mock_creds = MagicMock()
     mock_service = MagicMock()
-    mock_service.calendarList().list().execute.return_value = {
-        "items": [{"id": "primary"}]
-    }
-    mock_service.events().list().execute.return_value = {"items": []}
 
     with (
         patch(
-            "panager.google.credentials._get_valid_credentials",
+            "panager.google.calendar.tool._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
         patch("panager.google.calendar.tool._build_service", return_value=mock_service),
+        patch(
+            "panager.google.calendar.tool._execute",
+            side_effect=[{"items": [{"id": "primary"}]}, {"items": []}],
+        ),
     ):
         from panager.google.calendar.tool import make_event_list
 
@@ -65,18 +74,20 @@ async def test_event_list_no_events():
 async def test_event_create():
     mock_creds = MagicMock()
     mock_service = MagicMock()
-    mock_service.events().insert().execute.return_value = {
-        "id": "new_evt",
-        "summary": "새 이벤트",
-    }
+    created_event = {"id": "new_evt", "summary": "새 이벤트"}
 
     with (
         patch(
-            "panager.google.credentials._get_valid_credentials",
+            "panager.google.calendar.tool._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
         patch("panager.google.calendar.tool._build_service", return_value=mock_service),
+        patch(
+            "panager.google.calendar.tool._execute",
+            new_callable=AsyncMock,
+            return_value=created_event,
+        ),
     ):
         from panager.google.calendar.tool import make_event_create
 
@@ -96,21 +107,19 @@ async def test_event_create():
 async def test_event_update():
     mock_creds = MagicMock()
     mock_service = MagicMock()
-    mock_service.events().get().execute.return_value = {
-        "id": "evt1",
-        "summary": "기존 제목",
-        "start": {"dateTime": "2026-02-21T10:00:00+09:00"},
-        "end": {"dateTime": "2026-02-21T11:00:00+09:00"},
-    }
-    mock_service.events().patch().execute.return_value = {}
 
     with (
         patch(
-            "panager.google.credentials._get_valid_credentials",
+            "panager.google.calendar.tool._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
         patch("panager.google.calendar.tool._build_service", return_value=mock_service),
+        patch(
+            "panager.google.calendar.tool._execute",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
     ):
         from panager.google.calendar.tool import make_event_update
 
@@ -135,11 +144,12 @@ async def test_event_update_no_fields():
 
     with (
         patch(
-            "panager.google.credentials._get_valid_credentials",
+            "panager.google.calendar.tool._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
         patch("panager.google.calendar.tool._build_service", return_value=mock_service),
+        patch("panager.google.calendar.tool._execute", new_callable=AsyncMock),
     ):
         from panager.google.calendar.tool import make_event_update
 
@@ -158,15 +168,19 @@ async def test_event_update_no_fields():
 async def test_event_delete():
     mock_creds = MagicMock()
     mock_service = MagicMock()
-    mock_service.events().delete().execute.return_value = None
 
     with (
         patch(
-            "panager.google.credentials._get_valid_credentials",
+            "panager.google.calendar.tool._get_valid_credentials",
             new_callable=AsyncMock,
             return_value=mock_creds,
         ),
         patch("panager.google.calendar.tool._build_service", return_value=mock_service),
+        patch(
+            "panager.google.calendar.tool._execute",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         from panager.google.calendar.tool import make_event_delete
 

@@ -31,15 +31,18 @@ def make_task_list(user_id: int):
         """Google Tasks의 할 일 목록을 조회합니다."""
         creds = await _get_valid_credentials(user_id)
         service = _build_service(creds)
-        result = _execute(service.tasks().list(tasklist="@default"))
+        result = await _execute(service.tasks().list(tasklist="@default"))
         items = result.get("items", [])
         if not items:
             return "할 일이 없습니다."
-        return "\n".join(
+        pending = [
             f"- [{item['id']}] {item['title']}"
             for item in items
             if item.get("status") == "needsAction"
-        )
+        ]
+        if not pending:
+            return "완료되지 않은 할 일이 없습니다."
+        return "\n".join(pending)
 
     return task_list
 
@@ -53,7 +56,7 @@ def make_task_create(user_id: int):
         body: dict = {"title": title}
         if due_at:
             body["due"] = due_at
-        _execute(service.tasks().insert(tasklist="@default", body=body))
+        await _execute(service.tasks().insert(tasklist="@default", body=body))
         return f"할 일이 추가되었습니다: {title}"
 
     return task_create
@@ -65,7 +68,7 @@ def make_task_complete(user_id: int):
         """Google Tasks의 할 일을 완료 처리합니다."""
         creds = await _get_valid_credentials(user_id)
         service = _build_service(creds)
-        _execute(
+        await _execute(
             service.tasks().patch(
                 tasklist="@default", task=task_id, body={"status": "completed"}
             )
