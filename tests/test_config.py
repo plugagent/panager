@@ -2,6 +2,7 @@ def test_settings_loads_from_env(monkeypatch):
     monkeypatch.setenv("DISCORD_TOKEN", "test_token")
     monkeypatch.setenv("LLM_BASE_URL", "https://example.com")
     monkeypatch.setenv("LLM_API_KEY", "test_key")
+    monkeypatch.setenv("LLM_MODEL", "minimax-m2.5-free")
     monkeypatch.setenv("POSTGRES_USER", "test")
     monkeypatch.setenv("POSTGRES_PASSWORD", "test")
     monkeypatch.setenv("POSTGRES_DB", "test")
