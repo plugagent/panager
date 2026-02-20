@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 import discord
+import psycopg
 from discord import app_commands
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
@@ -27,15 +28,17 @@ class PanagerBot(discord.Client):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self.graph = None
+        self._pg_conn: psycopg.AsyncConnection | None = None
 
     async def setup_hook(self) -> None:
         await init_pool(settings.postgres_dsn_asyncpg)
 
-        async with AsyncPostgresSaver.from_conn_string(
-            settings.postgres_dsn_asyncpg
-        ) as checkpointer:
-            await checkpointer.setup()
-            self.graph = build_graph(checkpointer)
+        self._pg_conn = await psycopg.AsyncConnection.connect(
+            settings.postgres_dsn_asyncpg, autocommit=True
+        )
+        checkpointer = AsyncPostgresSaver(self._pg_conn)
+        await checkpointer.setup()
+        self.graph = build_graph(checkpointer)
 
         register_commands(self, self.tree)
         await self.tree.sync()
@@ -59,6 +62,8 @@ class PanagerBot(discord.Client):
         scheduler = get_scheduler()
         if scheduler.running:
             scheduler.shutdown(wait=False)
+        if self._pg_conn:
+            await self._pg_conn.close()
         await close_pool()
         await super().close()
 
