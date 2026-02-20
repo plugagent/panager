@@ -6,11 +6,10 @@ import logging
 import discord
 import psycopg
 import uvicorn
-from discord import app_commands
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from panager.agent.graph import build_graph
-from panager.bot.handlers import handle_dm, register_commands
+from panager.bot.handlers import handle_dm
 from panager.config import Settings
 from panager.db.connection import close_pool, init_pool
 from panager.logging import configure_logging
@@ -27,7 +26,6 @@ class PanagerBot(discord.Client):
         intents.message_content = True
         intents.dm_messages = True
         super().__init__(intents=intents)
-        self.tree = app_commands.CommandTree(self)
         self.graph = None
         self._pg_conn: psycopg.AsyncConnection | None = None
         self.auth_complete_queue: asyncio.Queue = asyncio.Queue()
@@ -42,9 +40,6 @@ class PanagerBot(discord.Client):
         checkpointer = AsyncPostgresSaver(self._pg_conn)
         await checkpointer.setup()
         self.graph = build_graph(checkpointer, bot=self)
-
-        register_commands(self, self.tree)
-        await self.tree.sync()
 
         scheduler = get_scheduler()
         scheduler.start()

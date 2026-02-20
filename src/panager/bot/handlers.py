@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 import discord
-from discord import app_commands
 
 from panager.db.connection import get_pool
 
@@ -41,19 +40,3 @@ async def handle_dm(message: discord.Message, bot, graph) -> None:
         result = await graph.ainvoke(state, config=config)
         response = result["messages"][-1].content
         await message.channel.send(response)
-
-
-def register_commands(bot, tree: app_commands.CommandTree) -> None:
-    @tree.command(name="tasks", description="Google Tasks 할 일 목록 조회")
-    async def tasks_command(interaction: discord.Interaction):
-        await interaction.response.defer()
-        from panager.google.tasks.tool import make_task_list
-
-        tool = make_task_list(interaction.user.id)
-        result = await tool.ainvoke({})
-        await interaction.followup.send(result)
-
-    @tree.command(name="status", description="오늘의 요약")
-    async def status_command(interaction: discord.Interaction):
-        await interaction.response.defer()
-        await interaction.followup.send("오늘의 요약 기능은 준비 중입니다.")
