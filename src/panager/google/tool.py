@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
@@ -11,12 +12,14 @@ from panager.google.auth import refresh_access_token
 from panager.google.repository import get_tokens, update_access_token
 
 
+class GoogleAuthRequired(Exception):
+    """Google 계정 미연동 또는 scope 부족 시 발생하는 예외."""
+
+
 async def _get_valid_credentials(user_id: int) -> Credentials:
     tokens = await get_tokens(user_id)
     if not tokens:
-        raise ValueError(
-            "Google 계정이 연동되지 않았습니다. /auth 명령으로 연동해주세요."
-        )
+        raise GoogleAuthRequired("Google 계정이 연동되지 않았습니다.")
 
     if tokens.expires_at <= datetime.now(timezone.utc):
         new_token, new_expires = await refresh_access_token(tokens.refresh_token)
@@ -24,6 +27,16 @@ async def _get_valid_credentials(user_id: int) -> Credentials:
         tokens.access_token = new_token
 
     return Credentials(token=tokens.access_token)
+
+
+def _execute(request):
+    """googleapiclient 요청을 실행하고 403은 GoogleAuthRequired로 변환합니다."""
+    try:
+        return request.execute()
+    except HttpError as exc:
+        if exc.status_code == 403:
+            raise GoogleAuthRequired("Google 권한이 부족합니다. 재연동이 필요합니다.")
+        raise
 
 
 def _build_service(creds: Credentials):
@@ -54,7 +67,7 @@ def make_task_list(user_id: int):
         """Google Tasks의 할 일 목록을 조회합니다."""
         creds = await _get_valid_credentials(user_id)
         service = _build_service(creds)
-        result = service.tasks().list(tasklist="@default").execute()
+        result = _execute(service.tasks().list(tasklist="@default"))
         items = result.get("items", [])
         if not items:
             return "할 일이 없습니다."
@@ -76,7 +89,7 @@ def make_task_create(user_id: int):
         body: dict = {"title": title}
         if due_at:
             body["due"] = due_at
-        service.tasks().insert(tasklist="@default", body=body).execute()
+        _execute(service.tasks().insert(tasklist="@default", body=body))
         return f"할 일이 추가되었습니다: {title}"
 
     return task_create
@@ -88,9 +101,11 @@ def make_task_complete(user_id: int):
         """Google Tasks의 할 일을 완료 처리합니다."""
         creds = await _get_valid_credentials(user_id)
         service = _build_service(creds)
-        service.tasks().patch(
-            tasklist="@default", task=task_id, body={"status": "completed"}
-        ).execute()
+        _execute(
+            service.tasks().patch(
+                tasklist="@default", task=task_id, body={"status": "completed"}
+            )
+        )
         return f"할 일이 완료 처리되었습니다: {task_id}"
 
     return task_complete
@@ -152,21 +167,19 @@ def make_event_list(user_id: int):
         time_min = now.isoformat()
         time_max = (now + timedelta(days=days_ahead)).isoformat()
 
-        calendars = service.calendarList().list().execute().get("items", [])
+        calendars = _execute(service.calendarList().list()).get("items", [])
         events: list[str] = []
 
         for cal in calendars:
             cal_id = cal["id"]
-            result = (
-                service.events()
-                .list(
+            result = _execute(
+                service.events().list(
                     calendarId=cal_id,
                     timeMin=time_min,
                     timeMax=time_max,
                     singleEvents=True,
                     orderBy="startTime",
                 )
-                .execute()
             )
             for evt in result.get("items", []):
                 start = evt.get("start", {}).get("dateTime") or evt.get(
@@ -204,7 +217,7 @@ def make_event_create(user_id: int):
         if description:
             body["description"] = description
 
-        created = service.events().insert(calendarId=calendar_id, body=body).execute()
+        created = _execute(service.events().insert(calendarId=calendar_id, body=body))
         return f"이벤트가 추가되었습니다: {created.get('summary')} (id={created.get('id')})"
 
     return event_create
@@ -237,9 +250,11 @@ def make_event_update(user_id: int):
         if not patch_body:
             return "수정할 필드를 하나 이상 지정해주세요."
 
-        service.events().patch(
-            calendarId=calendar_id, eventId=event_id, body=patch_body
-        ).execute()
+        _execute(
+            service.events().patch(
+                calendarId=calendar_id, eventId=event_id, body=patch_body
+            )
+        )
         return f"이벤트가 수정되었습니다: {event_id}"
 
     return event_update
@@ -251,7 +266,7 @@ def make_event_delete(user_id: int):
         """Google Calendar 이벤트를 삭제합니다."""
         creds = await _get_valid_credentials(user_id)
         service = _build_calendar_service(creds)
-        service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+        _execute(service.events().delete(calendarId=calendar_id, eventId=event_id))
         return f"이벤트가 삭제되었습니다: {event_id}"
 
     return event_delete
@@ -283,7 +298,7 @@ async def task_list(user_id: int) -> str:
     """Google Tasks의 할 일 목록을 조회합니다."""
     creds = await _get_valid_credentials(user_id)
     service = _build_service(creds)
-    result = service.tasks().list(tasklist="@default").execute()
+    result = _execute(service.tasks().list(tasklist="@default"))
     items = result.get("items", [])
     if not items:
         return "할 일이 없습니다."
@@ -302,7 +317,7 @@ async def task_create(title: str, user_id: int, due_at: str | None = None) -> st
     body: dict = {"title": title}
     if due_at:
         body["due"] = due_at
-    service.tasks().insert(tasklist="@default", body=body).execute()
+    _execute(service.tasks().insert(tasklist="@default", body=body))
     return f"할 일이 추가되었습니다: {title}"
 
 
@@ -311,7 +326,9 @@ async def task_complete(task_id: str, user_id: int) -> str:
     """Google Tasks의 할 일을 완료 처리합니다."""
     creds = await _get_valid_credentials(user_id)
     service = _build_service(creds)
-    service.tasks().patch(
-        tasklist="@default", task=task_id, body={"status": "completed"}
-    ).execute()
+    _execute(
+        service.tasks().patch(
+            tasklist="@default", task=task_id, body={"status": "completed"}
+        )
+    )
     return f"할 일이 완료 처리되었습니다: {task_id}"

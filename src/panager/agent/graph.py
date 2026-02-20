@@ -10,6 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from panager.agent.state import AgentState
 from panager.config import Settings
 from panager.google.tool import (
+    GoogleAuthRequired,
     make_task_complete,
     make_task_create,
     make_task_list,
@@ -86,6 +87,8 @@ async def _tool_node(state: AgentState) -> dict:
         else:
             try:
                 result = await tool_map[tool_name].ainvoke(tool_args)
+            except GoogleAuthRequired as exc:
+                result = f"[GOOGLE_AUTH_REQUIRED] {exc}"
             except Exception as exc:
                 result = f"오류 발생: {exc}"
 

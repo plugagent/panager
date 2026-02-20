@@ -4,7 +4,7 @@
 
 **Goal:** 봇+API를 단일 프로세스로 통합하고, Google 미연동 시 인증 안내 후 완료되면 원래 요청을 자동 재실행한다.
 
-**Architecture:** `PanagerBot.setup_hook()`에서 uvicorn을 같은 이벤트 루프에 실행. `asyncio.Queue`로 OAuth 콜백 → 봇 브리지. `_tool_node`에서 미연동 에러를 잡아 pending 메시지 저장 + 인증 URL 반환.
+**Architecture:** `PanagerBot.setup_hook()`에서 uvicorn을 같은 이벤트 루프에 실행. `asyncio.Queue`로 OAuth 콜백 → 봇 브리지. `_tool_node`에서 `GoogleAuthRequired` 예외를 잡아 pending 메시지 저장 + 인증 URL 반환. `GoogleAuthRequired`는 미연동(`get_tokens` 없음)과 scope 부족(API 403) 두 경우 모두 발생하며, 재인증 URL(`prompt=consent`)로 통일 처리.
 
 **Tech Stack:** Python 3.13, discord.py, FastAPI, uvicorn, asyncio, langchain-core, asyncpg
 
@@ -381,17 +381,80 @@ git commit -m "feat: OAuth 콜백에서 auth_complete_queue에 이벤트 push"
 
 ---
 
-## Task 6: agent/graph.py — _tool_node에서 Google 미연동 에러 처리
+## Task 6: agent/graph.py — _tool_node에서 GoogleAuthRequired 에러 처리
 
 **Files:**
 - Modify: `src/panager/agent/graph.py`
+- Modify: `src/panager/google/tool.py` (GoogleAuthRequired 예외 + _execute 래퍼)
 
-**Step 1: _tool_node 수정**
+### 배경
 
-`ValueError`에 "Google 계정이 연동되지 않았습니다" 포함 시 → pending 저장 + 인증 URL 반환.
-봇 인스턴스는 `_tool_node`가 `state`에서 접근할 수 없으므로, `bot`을 클로저로 받는 팩토리 함수로 변경.
+Google 미연동(`get_tokens` 없음)과 scope 부족(API 403) 두 케이스를 동일하게 처리한다.
+`google/tool.py`에 `GoogleAuthRequired` 커스텀 예외와 `_execute()` 래퍼를 추가한다.
 
-`build_graph()`를 `build_graph(checkpointer, bot)`으로 변경:
+### Step 1: google/tool.py — GoogleAuthRequired + _execute 추가
+
+`_get_valid_credentials()` 위에 추가:
+
+```python
+from googleapiclient.errors import HttpError
+
+class GoogleAuthRequired(Exception):
+    """Google 계정 미연동 또는 scope 부족 시 발생하는 예외."""
+
+def _execute(request):
+    """googleapiclient 요청을 실행하고 403은 GoogleAuthRequired로 변환합니다."""
+    try:
+        return request.execute()
+    except HttpError as exc:
+        if exc.status_code == 403:
+            raise GoogleAuthRequired("Google 권한이 부족합니다. 재연동이 필요합니다.")
+        raise
+```
+
+`_get_valid_credentials()`의 `ValueError` → `GoogleAuthRequired`로 변경:
+```python
+async def _get_valid_credentials(user_id: int) -> Credentials:
+    tokens = await get_tokens(user_id)
+    if not tokens:
+        raise GoogleAuthRequired("Google 계정이 연동되지 않았습니다.")
+    ...
+```
+
+모든 `.execute()` 호출을 `_execute(...)` 로 교체.
+
+### Step 2: agent/graph.py — GoogleAuthRequired import + _tool_node 수정
+
+```python
+from panager.google.tool import GoogleAuthRequired, make_task_complete, ...
+```
+
+`_tool_node` 예외 처리:
+```python
+try:
+    result = await tool_map[tool_name].ainvoke(tool_args)
+except GoogleAuthRequired as exc:
+    result = f"[GOOGLE_AUTH_REQUIRED] {exc}"
+except Exception as exc:
+    result = f"오류 발생: {exc}"
+```
+
+`[GOOGLE_AUTH_REQUIRED]` 태그는 auth flow 구현(Task 3 bot/client.py)에서 pending 저장 + 인증 URL 삽입으로 대체된다.
+
+### Step 3: 테스트 통과 확인
+
+```bash
+uv run pytest tests/google/ tests/agent/ -v
+```
+
+Expected: 10 PASS
+
+### Step 4: Commit
+
+```bash
+git add src/panager/google/tool.py src/panager/agent/graph.py
+git commit -m "feat: GoogleAuthRequired 예외로 미연동/scope 부족 통일 처리"
+```
 
 ```python
 from __future__ import annotations
