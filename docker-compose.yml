@@ -1,4 +1,13 @@
 services:
+  migrate:
+    build: .
+    command: uv run alembic upgrade head
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   panager:
     build: .
     env_file: .env
@@ -7,6 +16,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   api:
@@ -18,6 +29,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   db:
