@@ -1,3 +1,10 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/panager"]
+
 [project]
 name = "panager"
 version = "0.1.0"
@@ -20,18 +27,12 @@ dependencies = [
     "google-api-python-client>=2.154.0",
 ]
 
-[project.optional-dependencies]
-dev = [
+[tool.uv]
+dev-dependencies = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
     "watchfiles>=1.0.0",
 ]
-
-[tool.uv.scripts]
-bot = "python -m panager.bot.client"
-api = "uvicorn panager.api.main:app --reload"
-migrate = "alembic upgrade head"
-test = "pytest"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1489,7 +1489,7 @@ wheels = [
 [[package]]
 name = "panager"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "apscheduler" },
@@ -1508,7 +1508,7 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1529,14 +1529,17 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.2.0" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.6.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "sentence-transformers", specifier = ">=3.3.0" },
     { name = "structlog", specifier = ">=24.4.0" },
     { name = "uvicorn", specifier = ">=0.32.0" },
-    { name = "watchfiles", marker = "extra == 'dev'", specifier = ">=1.0.0" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "watchfiles", specifier = ">=1.0.0" },
+]
 
 [[package]]
 name = "pluggy"
