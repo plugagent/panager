@@ -10,3 +10,4 @@ class AgentState(TypedDict):
     username: str
     messages: Annotated[list, add_messages]
     memory_context: str
+    timezone: str  # e.g. "Asia/Seoul"

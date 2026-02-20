@@ -34,6 +34,7 @@ async def handle_dm(message: discord.Message, bot, graph) -> None:
         "username": str(message.author),
         "messages": [HumanMessage(content=message.content)],
         "memory_context": "",
+        "timezone": "Asia/Seoul",
     }
 
     async with message.channel.typing():
@@ -46,7 +47,7 @@ def register_commands(bot, tree: app_commands.CommandTree) -> None:
     @tree.command(name="tasks", description="Google Tasks 할 일 목록 조회")
     async def tasks_command(interaction: discord.Interaction):
         await interaction.response.defer()
-        from panager.google.tool import make_task_list
+        from panager.google.tasks.tool import make_task_list
 
         tool = make_task_list(interaction.user.id)
         result = await tool.ainvoke({})

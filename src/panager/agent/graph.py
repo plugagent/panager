@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import zoneinfo
+from datetime import datetime
 from functools import lru_cache
 from typing import Literal
 
@@ -11,16 +13,7 @@ from langgraph.graph import END, START, StateGraph
 from panager.agent.state import AgentState
 from panager.config import Settings
 from panager.google.auth import get_auth_url
-from panager.google.tool import (
-    GoogleAuthRequired,
-    make_event_create,
-    make_event_delete,
-    make_event_list,
-    make_event_update,
-    make_task_complete,
-    make_task_create,
-    make_task_list,
-)
+from panager.google.credentials import GoogleAuthRequired
 from panager.memory.tool import make_memory_save, make_memory_search
 from panager.scheduler.tool import make_schedule_cancel, make_schedule_create
 
@@ -41,6 +34,18 @@ def _get_llm() -> ChatOpenAI:
 
 def _build_tools(user_id: int) -> list:
     """user_id를 클로저로 포함한 tool 인스턴스 목록을 반환합니다."""
+    from panager.google.tasks.tool import (
+        make_task_complete,
+        make_task_create,
+        make_task_list,
+    )
+    from panager.google.calendar.tool import (
+        make_event_create,
+        make_event_delete,
+        make_event_list,
+        make_event_update,
+    )
+
     return [
         make_memory_save(user_id),
         make_memory_search(user_id),
@@ -58,11 +63,19 @@ def _build_tools(user_id: int) -> list:
 
 async def _agent_node(state: AgentState) -> dict:
     user_id = state["user_id"]
+    tz_name = state.get("timezone", "Asia/Seoul")
+    tz = zoneinfo.ZoneInfo(tz_name)
+    now = datetime.now(tz)
+    now_str = now.strftime("%Y년 %m월 %d일 (%A) %H:%M")
+
     tools = _build_tools(user_id)
     llm = _get_llm().bind_tools(tools)
     system_prompt = (
         f"당신은 {state['username']}의 개인 매니저 패니저입니다. "
         "사용자의 할 일, 일정, 메모리를 관리하고 적극적으로 도와주세요.\n\n"
+        f"현재 날짜/시간: {now_str} ({tz_name})\n"
+        "날짜/시간 관련 요청은 반드시 위 현재 시각 기준으로 ISO 8601 형식으로 변환하세요. "
+        f"예: {now.strftime('%Y')}-MM-DDTHH:MM:SS+09:00\n\n"
         f"관련 메모리:\n{state.get('memory_context', '없음')}"
     )
     messages = [SystemMessage(content=system_prompt)] + state["messages"]

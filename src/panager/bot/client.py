@@ -83,6 +83,7 @@ class PanagerBot(discord.Client):
                     "username": str(user),
                     "messages": [HumanMessage(content=pending_message)],
                     "memory_context": "",
+                    "timezone": "Asia/Seoul",
                 }
                 async with dm.typing():
                     result = await self.graph.ainvoke(state, config=config)
