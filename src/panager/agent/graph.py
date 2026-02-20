@@ -9,7 +9,15 @@ from langgraph.graph import END, START, StateGraph
 
 from panager.agent.state import AgentState
 from panager.config import Settings
-from panager.google.tool import make_task_complete, make_task_create, make_task_list
+from panager.google.tool import (
+    make_task_complete,
+    make_task_create,
+    make_task_list,
+    make_event_list,
+    make_event_create,
+    make_event_update,
+    make_event_delete,
+)
 from panager.memory.tool import make_memory_save, make_memory_search
 from panager.scheduler.tool import make_schedule_cancel, make_schedule_create
 
@@ -38,6 +46,10 @@ def _build_tools(user_id: int) -> list:
         make_task_create(user_id),
         make_task_list(user_id),
         make_task_complete(user_id),
+        make_event_list(user_id),
+        make_event_create(user_id),
+        make_event_update(user_id),
+        make_event_delete(user_id),
     ]
 
 
