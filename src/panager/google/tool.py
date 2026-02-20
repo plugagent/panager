@@ -30,22 +30,94 @@ def _build_service(creds: Credentials):
     return build("tasks", "v1", credentials=creds)
 
 
+# ---------------------------------------------------------------------------
+# Tool factories – user_id is captured via closure, not exposed to the LLM
+# ---------------------------------------------------------------------------
+
+
 class TaskListInput(BaseModel):
-    user_id: int
+    pass
 
 
 class TaskCreateInput(BaseModel):
     title: str
-    user_id: int
     due_at: str | None = None
 
 
 class TaskCompleteInput(BaseModel):
     task_id: str
+
+
+def make_task_list(user_id: int):
+    @tool(args_schema=TaskListInput)
+    async def task_list() -> str:
+        """Google Tasks의 할 일 목록을 조회합니다."""
+        creds = await _get_valid_credentials(user_id)
+        service = _build_service(creds)
+        result = service.tasks().list(tasklist="@default").execute()
+        items = result.get("items", [])
+        if not items:
+            return "할 일이 없습니다."
+        return "\n".join(
+            f"- [{item['id']}] {item['title']}"
+            for item in items
+            if item.get("status") == "needsAction"
+        )
+
+    return task_list
+
+
+def make_task_create(user_id: int):
+    @tool(args_schema=TaskCreateInput)
+    async def task_create(title: str, due_at: str | None = None) -> str:
+        """Google Tasks에 새 할 일을 추가합니다."""
+        creds = await _get_valid_credentials(user_id)
+        service = _build_service(creds)
+        body: dict = {"title": title}
+        if due_at:
+            body["due"] = due_at
+        service.tasks().insert(tasklist="@default", body=body).execute()
+        return f"할 일이 추가되었습니다: {title}"
+
+    return task_create
+
+
+def make_task_complete(user_id: int):
+    @tool(args_schema=TaskCompleteInput)
+    async def task_complete(task_id: str) -> str:
+        """Google Tasks의 할 일을 완료 처리합니다."""
+        creds = await _get_valid_credentials(user_id)
+        service = _build_service(creds)
+        service.tasks().patch(
+            tasklist="@default", task=task_id, body={"status": "completed"}
+        ).execute()
+        return f"할 일이 완료 처리되었습니다: {task_id}"
+
+    return task_complete
+
+
+# ---------------------------------------------------------------------------
+# Standalone tool objects kept for backward compatibility (e.g. slash commands)
+# These still require user_id as an argument.
+# ---------------------------------------------------------------------------
+
+
+class _TaskListInputLegacy(BaseModel):
     user_id: int
 
 
-@tool(args_schema=TaskListInput)
+class _TaskCreateInputLegacy(BaseModel):
+    title: str
+    user_id: int
+    due_at: str | None = None
+
+
+class _TaskCompleteInputLegacy(BaseModel):
+    task_id: str
+    user_id: int
+
+
+@tool(args_schema=_TaskListInputLegacy)
 async def task_list(user_id: int) -> str:
     """Google Tasks의 할 일 목록을 조회합니다."""
     creds = await _get_valid_credentials(user_id)
@@ -61,7 +133,7 @@ async def task_list(user_id: int) -> str:
     )
 
 
-@tool(args_schema=TaskCreateInput)
+@tool(args_schema=_TaskCreateInputLegacy)
 async def task_create(title: str, user_id: int, due_at: str | None = None) -> str:
     """Google Tasks에 새 할 일을 추가합니다."""
     creds = await _get_valid_credentials(user_id)
@@ -73,7 +145,7 @@ async def task_create(title: str, user_id: int, due_at: str | None = None) -> st
     return f"할 일이 추가되었습니다: {title}"
 
 
-@tool(args_schema=TaskCompleteInput)
+@tool(args_schema=_TaskCompleteInputLegacy)
 async def task_complete(task_id: str, user_id: int) -> str:
     """Google Tasks의 할 일을 완료 처리합니다."""
     creds = await _get_valid_credentials(user_id)
