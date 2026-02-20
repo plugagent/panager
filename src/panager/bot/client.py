@@ -6,10 +6,11 @@ import logging
 import discord
 import psycopg
 import uvicorn
+from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from panager.agent.graph import build_graph
-from panager.bot.handlers import handle_dm
+from panager.bot.handlers import handle_dm, _stream_agent_response
 from panager.config import Settings
 from panager.db.connection import close_pool, init_pool
 from panager.logging import configure_logging
@@ -70,8 +71,6 @@ class PanagerBot(discord.Client):
             try:
                 user = await self.fetch_user(user_id)
                 dm = await user.create_dm()
-                from langchain_core.messages import HumanMessage
-
                 config = {"configurable": {"thread_id": str(user_id)}}
                 state = {
                     "user_id": user_id,
@@ -80,10 +79,7 @@ class PanagerBot(discord.Client):
                     "memory_context": "",
                     "timezone": "Asia/Seoul",
                 }
-                async with dm.typing():
-                    result = await self.graph.ainvoke(state, config=config)
-                    response = result["messages"][-1].content
-                    await dm.send(response)
+                await _stream_agent_response(self.graph, state, config, dm)
             except Exception as exc:
                 log.exception("인증 후 재실행 실패: %s", exc)
 

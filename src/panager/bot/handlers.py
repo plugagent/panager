@@ -4,7 +4,7 @@ import logging
 import time
 
 import discord
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessageChunk, HumanMessage
 
 from panager.db.connection import get_pool
 
@@ -73,8 +73,6 @@ async def handle_dm(message: discord.Message, bot, graph) -> None:
         )
 
     # 에이전트 실행
-    from langchain_core.messages import HumanMessage
-
     config = {"configurable": {"thread_id": str(user_id)}}
     state = {
         "user_id": user_id,
