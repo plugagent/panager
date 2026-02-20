@@ -123,6 +123,35 @@ async def test_event_update():
             }
         )
         assert "수정" in result
+        mock_service.events().patch.assert_called_with(
+            calendarId="primary", eventId="evt1", body={"summary": "수정된 제목"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_event_update_no_fields():
+    mock_creds = MagicMock()
+    mock_service = MagicMock()
+
+    with (
+        patch(
+            "panager.google.tool._get_valid_credentials",
+            new_callable=AsyncMock,
+            return_value=mock_creds,
+        ),
+        patch("panager.google.tool._build_calendar_service", return_value=mock_service),
+    ):
+        from panager.google.tool import make_event_update
+
+        tool = make_event_update(user_id=123)
+        result = await tool.ainvoke(
+            {
+                "event_id": "evt1",
+                "calendar_id": "primary",
+            }
+        )
+        assert "수정할 필드" in result
+        mock_service.events().patch.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -234,6 +234,9 @@ def make_event_update(user_id: int):
         if description is not None:
             patch_body["description"] = description
 
+        if not patch_body:
+            return "수정할 필드를 하나 이상 지정해주세요."
+
         service.events().patch(
             calendarId=calendar_id, eventId=event_id, body=patch_body
         ).execute()
