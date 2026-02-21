@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from langchain_core.messages import AIMessageChunk
@@ -54,15 +53,14 @@ async def test_stream_empty_response_sends_fallback():
 
     await _stream_agent_response(mock_graph, state, config, mock_channel)
 
-    # send는 반드시 1회 호출 ("생각하는 중..." 문자열로)
+    # 빈 스트림 → "생각하는 중..." 전송 후 fallback 텍스트로 edit
     mock_channel.send.assert_called_once_with("생각하는 중...")
-    # 빈 스트림 → fallback 텍스트로 edit
     sent_message.edit.assert_called_once_with(content="(응답을 받지 못했습니다.)")
 
 
 @pytest.mark.asyncio
-async def test_stream_sends_thinking_message():
-    """channel.send('생각하는 중...')가 반드시 1회 호출되는지 검증."""
+async def test_stream_sends_initial_cursor_message():
+    """첫 토큰 수신 즉시 초기 메시지(▌)를 전송하는지 검증."""
     from panager.bot.handlers import _stream_agent_response
 
     mock_channel = MagicMock()
@@ -78,5 +76,5 @@ async def test_stream_sends_thinking_message():
 
     await _stream_agent_response(mock_graph, state, config, mock_channel)
 
-    # "생각하는 중..." 메시지가 반드시 1회 전송되어야 함 (타이밍 순서는 무관)
+    # "생각하는 중..." 메시지가 astream 전에 즉시 전송되어야 함
     mock_channel.send.assert_called_once_with("생각하는 중...")
