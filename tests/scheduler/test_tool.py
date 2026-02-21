@@ -27,13 +27,13 @@ async def test_schedule_create_tool():
         patch("panager.scheduler.tool.get_pool", return_value=mock_pool),
         patch("panager.scheduler.tool.get_scheduler", return_value=mock_scheduler),
     ):
-        from panager.scheduler.tool import schedule_create
+        from panager.scheduler.tool import make_schedule_create
 
-        result = await schedule_create.ainvoke(
+        tool = make_schedule_create(user_id=123, bot=None)
+        result = await tool.ainvoke(
             {
                 "message": "회의 알림",
                 "trigger_at": future_time.isoformat(),
-                "user_id": 123,
             }
         )
         assert "예약" in result

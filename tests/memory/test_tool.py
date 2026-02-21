@@ -10,11 +10,10 @@ async def test_memory_save_tool():
     ):
         mock_save.return_value = "test-uuid"
 
-        from panager.memory.tool import memory_save
+        from panager.memory.tool import make_memory_save
 
-        result = await memory_save.ainvoke(
-            {"content": "오늘 회의 참석", "user_id": 123}
-        )
+        tool = make_memory_save(user_id=123)
+        result = await tool.ainvoke({"content": "오늘 회의 참석"})
         assert "저장" in result
         mock_save.assert_called_once()
 
@@ -29,9 +28,8 @@ async def test_memory_search_tool():
     ):
         mock_search.return_value = ["오늘 회의 참석"]
 
-        from panager.memory.tool import memory_search
+        from panager.memory.tool import make_memory_search
 
-        result = await memory_search.ainvoke(
-            {"query": "회의", "user_id": 123, "limit": 5}
-        )
+        tool = make_memory_search(user_id=123)
+        result = await tool.ainvoke({"query": "회의", "limit": 5})
         assert "오늘 회의 참석" in result
