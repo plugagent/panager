@@ -64,17 +64,35 @@ def make_task_create(user_id: int):
     return task_create
 
 
+class TaskDeleteInput(BaseModel):
+    task_id: str
+
+
+def make_task_delete(user_id: int):
+    @tool(args_schema=TaskDeleteInput)
+    async def task_delete(task_id: str) -> str:
+        """Google Tasks의 할 일을 삭제합니다."""
+        creds = await _get_valid_credentials(user_id)
+        service = _build_service(creds)
+        await _execute(service.tasks().delete(tasklist="@default", task=task_id))
+        return f"할 일이 삭제되었습니다: {task_id}"
+
+    return task_delete
+
+
 def make_task_complete(user_id: int):
     @tool(args_schema=TaskCompleteInput)
     async def task_complete(task_id: str) -> str:
-        """Google Tasks의 할 일을 완료 처리합니다."""
+        """Google Tasks의 할 일을 완료 표시합니다."""
         creds = await _get_valid_credentials(user_id)
         service = _build_service(creds)
         await _execute(
             service.tasks().patch(
-                tasklist="@default", task=task_id, body={"status": "completed"}
+                tasklist="@default",
+                task=task_id,
+                body={"status": "completed"},
             )
         )
-        return f"할 일이 완료 처리되었습니다: {task_id}"
+        return f"할 일이 완료되었습니다: {task_id}"
 
     return task_complete

@@ -45,6 +45,7 @@ def _build_tools(user_id: int, bot: Any = None) -> list[Any]:
     from panager.google.tasks.tool import (
         make_task_complete,
         make_task_create,
+        make_task_delete,
         make_task_list,
     )
     from panager.google.calendar.tool import (
@@ -62,6 +63,7 @@ def _build_tools(user_id: int, bot: Any = None) -> list[Any]:
         make_task_create(user_id),
         make_task_list(user_id),
         make_task_complete(user_id),
+        make_task_delete(user_id),
         make_event_list(user_id),
         make_event_create(user_id),
         make_event_update(user_id),
