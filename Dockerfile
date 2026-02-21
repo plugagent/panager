@@ -23,7 +23,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 RUN uv run python -c \
     "from sentence_transformers import SentenceTransformer; \
-     SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')"
+     SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')" && \
+    chown -R panager:panager /home/panager/.cache
 
 USER panager
 
