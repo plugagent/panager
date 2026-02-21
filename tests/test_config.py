@@ -14,7 +14,7 @@ def test_settings_loads_from_env(monkeypatch):
 
     from panager.config import Settings
 
-    settings = Settings()
+    settings = Settings()  # type: ignore[call-arg]
     assert settings.discord_token == "test_token"
     assert settings.llm_model == "minimax-m2.5-free"
     assert settings.postgres_port == 5432
@@ -35,5 +35,5 @@ def test_postgres_dsn_property(monkeypatch):
 
     from panager.config import Settings
 
-    settings = Settings()
+    settings = Settings()  # type: ignore[call-arg]
     assert "panager:secret@localhost:5432/panager" in settings.postgres_dsn

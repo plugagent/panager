@@ -16,6 +16,7 @@ from langchain_core.messages import (
 )
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
+from pydantic import SecretStr
 
 from panager.agent.state import AgentState
 from panager.config import Settings
@@ -27,7 +28,7 @@ from panager.scheduler.tool import make_schedule_cancel, make_schedule_create
 
 @lru_cache
 def _get_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]
 
 
 def _get_llm() -> ChatOpenAI:
@@ -35,7 +36,7 @@ def _get_llm() -> ChatOpenAI:
     return ChatOpenAI(
         model=settings.llm_model,
         base_url=settings.llm_base_url,
-        api_key=settings.llm_api_key,
+        api_key=SecretStr(settings.llm_api_key),
         streaming=True,
     )
 
@@ -122,6 +123,9 @@ def _make_tool_node(bot):
         last_message = state["messages"][-1]
         tool_messages: list[ToolMessage] = []
 
+        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+            return {"messages": tool_messages}
+
         for tool_call in last_message.tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
@@ -160,7 +164,7 @@ def _make_tool_node(bot):
     return _tool_node
 
 
-def _should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+def _should_continue(state: AgentState) -> str:
     if not state["messages"]:
         return END
     last_message = state["messages"][-1]

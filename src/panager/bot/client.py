@@ -20,7 +20,7 @@ from panager.logging import configure_logging
 from panager.scheduler.runner import get_scheduler, restore_pending_schedules
 
 log = logging.getLogger(__name__)
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]
 configure_logging(settings)
 
 
@@ -82,7 +82,7 @@ class PanagerBot(discord.Client):
         intents.dm_messages = True
         super().__init__(intents=intents)
         self.graph: Any = None
-        self._pg_conn: psycopg.AsyncConnection | None = None
+        self._pg_conn: Any = None
         self.auth_complete_queue: asyncio.Queue[dict[str, int | str | None]] = (
             asyncio.Queue()
         )
@@ -124,7 +124,7 @@ class PanagerBot(discord.Client):
     async def _process_auth_queue(self) -> None:
         while True:
             event = await self.auth_complete_queue.get()
-            user_id: int = event["user_id"]
+            user_id: int = event["user_id"]  # type: ignore[assignment]
             pending_message: str | None = self.pending_messages.pop(user_id, None)
             if not pending_message:
                 continue

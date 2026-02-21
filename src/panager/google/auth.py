@@ -18,7 +18,7 @@ SCOPES = [
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]
 
 
 def _make_flow(settings: Settings) -> Flow:

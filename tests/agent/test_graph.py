@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage, AIMessage
+from panager.agent.state import AgentState
 
 
 @pytest.mark.asyncio
@@ -55,7 +56,7 @@ async def test_agent_node_system_prompt_contains_date_and_timezone():
 
         from panager.agent.graph import _agent_node
 
-        state = {
+        state: AgentState = {  # type: ignore[typeddict-item]
             "user_id": 1,
             "username": "테스트유저",
             "messages": [HumanMessage(content="안녕")],
@@ -101,7 +102,7 @@ async def test_agent_node_invalid_timezone_falls_back_to_seoul():
 
         from panager.agent.graph import _agent_node
 
-        state = {
+        state: AgentState = {  # type: ignore[typeddict-item]
             "user_id": 1,
             "username": "테스트유저",
             "messages": [HumanMessage(content="안녕")],
@@ -183,7 +184,7 @@ async def test_agent_node_calls_trim_messages_with_correct_args():
     mock_llm.bind_tools.return_value = mock_llm
     mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
-    state = {
+    state: AgentState = {  # type: ignore[typeddict-item]
         "user_id": 123,
         "username": "testuser",
         "messages": [HumanMessage(content="안녕")],
@@ -201,7 +202,7 @@ async def test_agent_node_calls_trim_messages_with_correct_args():
 
     mock_trim.assert_called_once()
     call_kwargs = mock_trim.call_args.kwargs
-    settings = Settings()
+    settings = Settings()  # type: ignore[call-arg]
     assert call_kwargs["max_tokens"] == settings.checkpoint_max_tokens
     assert call_kwargs["strategy"] == "last"
     assert call_kwargs["token_counter"] == "approximate"
