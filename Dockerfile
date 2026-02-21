@@ -2,7 +2,7 @@ FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim
 
 WORKDIR /app
 
-ENV HF_HOME=/app/.cache/huggingface
+ENV HF_HOME=/root/.cache/huggingface
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
