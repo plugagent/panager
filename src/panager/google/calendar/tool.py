@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -10,7 +11,7 @@ from pydantic import BaseModel
 from panager.google.credentials import _execute, _get_valid_credentials
 
 
-def _build_service(creds: Credentials):
+def _build_service(creds: Credentials) -> Any:
     return build("calendar", "v3", credentials=creds)
 
 

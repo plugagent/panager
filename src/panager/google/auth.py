@@ -49,7 +49,7 @@ def get_auth_url(user_id: int) -> str:
     return auth_url
 
 
-async def exchange_code(code: str, user_id: int) -> dict:
+async def exchange_code(code: str, user_id: int) -> dict[str, str | datetime]:
     settings = get_settings()
     flow = _make_flow(settings)
     await asyncio.to_thread(flow.fetch_token, code=code)

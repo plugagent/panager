@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import FastAPI
 
 from panager.api.auth import router as auth_router
 
 
-def create_app(bot) -> FastAPI:
+def create_app(bot: Any) -> FastAPI:
     app = FastAPI(title="Panager API")
     app.state.bot = bot
     app.include_router(auth_router, prefix="/auth")

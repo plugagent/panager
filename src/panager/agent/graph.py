@@ -40,7 +40,7 @@ def _get_llm() -> ChatOpenAI:
     )
 
 
-def _build_tools(user_id: int, bot: Any = None) -> list:
+def _build_tools(user_id: int, bot: Any = None) -> list[Any]:
     """user_id를 클로저로 포함한 tool 인스턴스 목록을 반환합니다."""
     from panager.google.tasks.tool import (
         make_task_complete,
@@ -72,7 +72,7 @@ def _build_tools(user_id: int, bot: Any = None) -> list:
 _WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
 
-async def _agent_node(state: AgentState, bot: Any = None) -> dict:
+async def _agent_node(state: AgentState, bot: Any = None) -> dict[str, list[Any]]:
     settings = _get_settings()
     user_id = state["user_id"]
     tz_name = state.get("timezone", "Asia/Seoul")
@@ -169,7 +169,7 @@ def _should_continue(state: AgentState) -> Literal["tools", "__end__"]:
     return END
 
 
-def build_graph(checkpointer, bot=None) -> object:
+def build_graph(checkpointer: Any, bot: Any = None) -> Any:
     graph = StateGraph(AgentState)
     agent_node = functools.partial(_agent_node, bot=bot)
     graph.add_node("agent", agent_node)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from typing import Any
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
@@ -40,7 +41,7 @@ async def _get_valid_credentials(user_id: int) -> Credentials:
     )
 
 
-async def _execute(request) -> dict | None:
+async def _execute(request: Any) -> dict | None:
     """googleapiclient 요청을 비동기로 실행하고 401/403은 GoogleAuthRequired로 변환합니다."""
     try:
         return await asyncio.to_thread(request.execute)

@@ -26,7 +26,7 @@ class ScheduleCancelInput(BaseModel):
     schedule_id: str
 
 
-def make_schedule_create(user_id: int, bot: Any = None):
+def make_schedule_create(user_id: int, bot: Any = None) -> Any:
     @tool(args_schema=ScheduleCreateInput)
     async def schedule_create(message: str, trigger_at: str) -> str:
         """지정한 시간에 사용자에게 DM 알림을 예약합니다."""
@@ -60,7 +60,7 @@ def make_schedule_create(user_id: int, bot: Any = None):
     return schedule_create
 
 
-def make_schedule_cancel(user_id: int):
+def make_schedule_cancel(user_id: int) -> Any:
     @tool(args_schema=ScheduleCancelInput)
     async def schedule_cancel(schedule_id: str) -> str:
         """예약된 알림을 취소합니다."""

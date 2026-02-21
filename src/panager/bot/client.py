@@ -4,6 +4,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import discord
 import psycopg
@@ -80,9 +81,11 @@ class PanagerBot(discord.Client):
         intents.message_content = True
         intents.dm_messages = True
         super().__init__(intents=intents)
-        self.graph = None
+        self.graph: Any = None
         self._pg_conn: psycopg.AsyncConnection | None = None
-        self.auth_complete_queue: asyncio.Queue = asyncio.Queue()
+        self.auth_complete_queue: asyncio.Queue[dict[str, int | str | None]] = (
+            asyncio.Queue()
+        )
         self.pending_messages: dict[int, str] = {}
 
     async def setup_hook(self) -> None:

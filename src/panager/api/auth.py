@@ -10,13 +10,13 @@ router = APIRouter()
 
 
 @router.get("/google/login")
-async def google_login(user_id: int):
+async def google_login(user_id: int) -> RedirectResponse:
     url = get_auth_url(user_id)
     return RedirectResponse(url)
 
 
 @router.get("/google/callback")
-async def google_callback(request: Request, code: str, state: str):
+async def google_callback(request: Request, code: str, state: str) -> HTMLResponse:
     try:
         user_id = int(state)
         tokens = await exchange_code(code, user_id)

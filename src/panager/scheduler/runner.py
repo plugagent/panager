@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -18,7 +19,7 @@ def get_scheduler() -> AsyncIOScheduler:
 
 
 async def send_scheduled_dm(
-    bot,
+    bot: Any,
     user_id: int,
     schedule_id: str,
     message: str,
@@ -47,7 +48,7 @@ async def send_scheduled_dm(
             log.error("알림 발송 최대 재시도 초과", extra={"schedule_id": schedule_id})
 
 
-async def restore_pending_schedules(bot) -> None:
+async def restore_pending_schedules(bot: Any) -> None:
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(

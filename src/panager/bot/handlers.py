@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 import discord
 from langchain_core.messages import AIMessageChunk, HumanMessage
@@ -13,7 +14,12 @@ log = logging.getLogger(__name__)
 STREAM_DEBOUNCE = 0.2  # seconds — Discord rate limit 대응
 
 
-async def _stream_agent_response(graph, state: dict, config: dict, channel) -> None:
+async def _stream_agent_response(
+    graph: Any,
+    state: dict,
+    config: dict,
+    channel: discord.abc.Messageable,
+) -> None:
     """
     LangGraph graph를 스트리밍 모드로 실행하고,
     Discord 채널에 점진적으로 메시지를 전송/수정한다.
@@ -50,7 +56,7 @@ async def _stream_agent_response(graph, state: dict, config: dict, channel) -> N
     await sent_message.edit(content=final_text)
 
 
-async def handle_dm(message: discord.Message, bot, graph) -> None:
+async def handle_dm(message: discord.Message, bot: Any, graph: Any) -> None:
     user_id = message.author.id
     pool = get_pool()
 

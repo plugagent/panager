@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from langchain_core.tools import tool
@@ -8,7 +10,7 @@ from pydantic import BaseModel
 from panager.google.credentials import _execute, _get_valid_credentials
 
 
-def _build_service(creds: Credentials):
+def _build_service(creds: Credentials) -> Any:
     return build("tasks", "v1", credentials=creds)
 
 

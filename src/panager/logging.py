@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import logging
 import logging.handlers
 
 import structlog
 
+from panager.config import Settings
 
-def configure_logging(settings) -> None:
+
+def configure_logging(settings: Settings) -> None:
     console_handler = logging.StreamHandler()
     file_handler = logging.handlers.RotatingFileHandler(
         filename=settings.log_file_path,

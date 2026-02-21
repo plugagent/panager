@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from langchain_core.tools import tool
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
@@ -30,7 +32,7 @@ class MemorySearchInput(BaseModel):
     limit: int = 5
 
 
-def make_memory_save(user_id: int):
+def make_memory_save(user_id: int) -> Any:
     @tool(args_schema=MemorySaveInput)
     async def memory_save(content: str) -> str:
         """중요한 내용을 장기 메모리에 저장합니다."""
@@ -41,7 +43,7 @@ def make_memory_save(user_id: int):
     return memory_save
 
 
-def make_memory_search(user_id: int):
+def make_memory_search(user_id: int) -> Any:
     @tool(args_schema=MemorySearchInput)
     async def memory_search(query: str, limit: int = 5) -> str:
         """사용자의 과거 대화/패턴에서 관련 내용을 검색합니다."""
