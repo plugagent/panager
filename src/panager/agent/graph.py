@@ -20,7 +20,6 @@ from langgraph.types import interrupt
 from pydantic import SecretStr
 
 from panager.agent.state import AgentState
-from panager.bot.views import ConfirmView, HITL_TOOL_LABELS
 from panager.config import Settings
 from panager.google.auth import get_auth_url
 from panager.google.credentials import GoogleAuthRequired
@@ -125,36 +124,14 @@ async def _agent_node(state: AgentState, bot: Any = None) -> dict[str, list[Any]
     return {"messages": [response]}
 
 
-async def _hitl_node(state: AgentState, bot: Any = None) -> dict:
-    """HITL 대상 tool call 전 사용자 확인을 요청하고 interrupt()로 대기한다."""
+async def _hitl_node(state: AgentState) -> dict:
+    """HITL 대상 tool call 전 interrupt()로 사용자 확인을 대기한다.
+
+    Discord 버튼 전송은 handle_dm에서 담당한다.
+    resume 값: "approved" | "rejected"
+    """
     last_message = state["messages"][-1]
     tool_call = last_message.tool_calls[0]  # type: ignore[union-attr]
-    tool_name = tool_call["name"]
-    tool_args = tool_call["args"]
-
-    label = HITL_TOOL_LABELS.get(tool_name, tool_name)
-    args_text = "\n".join(f"  {k}: {v}" for k, v in tool_args.items())
-    confirm_text = (
-        f"패니저가 다음 작업을 실행하려 합니다:\n\n"
-        f"**{label}**\n{args_text}\n\n"
-        "진행하시겠습니까?"
-    )
-
-    if bot is not None:
-        user_id = state["user_id"]
-        thread_id = str(user_id)
-        try:
-            user = await bot.fetch_user(user_id)
-            dm = await user.create_dm()
-            view = ConfirmView(thread_id=thread_id, bot=bot)
-            await dm.send(confirm_text, view=view)
-        except Exception as exc:
-            log.warning("HITL 확인 메시지 전송 실패: %s", exc)
-            cancel_msg = ToolMessage(
-                content="사용자에게 확인 메시지를 전송할 수 없습니다. DM을 확인해주세요.",
-                tool_call_id=tool_call["id"],
-            )
-            return {"messages": [cancel_msg], "hitl_tool_call": None}
 
     decision = interrupt({"tool_call": tool_call})
 
@@ -250,10 +227,9 @@ def _should_continue_or_hitl(state: AgentState) -> str:
 def build_graph(checkpointer: Any, bot: Any = None) -> Any:
     graph = StateGraph(AgentState)
     agent_node = functools.partial(_agent_node, bot=bot)
-    hitl_node = functools.partial(_hitl_node, bot=bot)
 
     graph.add_node("agent", agent_node)
-    graph.add_node("hitl", hitl_node)
+    graph.add_node("hitl", _hitl_node)
     graph.add_node("tools", _make_tool_node(bot))
 
     graph.add_edge(START, "agent")

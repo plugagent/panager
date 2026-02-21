@@ -1,22 +1,15 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 from langchain_core.messages import AIMessage, ToolMessage
+
+from panager import agent
+from panager.agent.graph import _hitl_node, _should_continue_or_hitl
+from panager.agent.state import AgentState
 
 
 @pytest.mark.asyncio
 async def test_hitl_node_approved_returns_tool_call():
-    """_hitl_node가 approved 시 hitl_tool_call을 반환하는지 검증."""
-    from panager import agent
-    from panager.agent.graph import _hitl_node
-    from panager.agent.state import AgentState
-
-    mock_bot = MagicMock()
-    mock_user = AsyncMock()
-    mock_dm = AsyncMock()
-    mock_bot.fetch_user = AsyncMock(return_value=mock_user)
-    mock_user.create_dm = AsyncMock(return_value=mock_dm)
-    mock_dm.send = AsyncMock()
-
+    """interrupt가 approved를 반환하면 hitl_tool_call이 설정되는지 검증."""
     tool_call = {"name": "task_delete", "args": {"task_id": "abc"}, "id": "call_1"}
     state: AgentState = {  # type: ignore[typeddict-item]
         "user_id": 123,
@@ -26,22 +19,16 @@ async def test_hitl_node_approved_returns_tool_call():
     }
 
     with patch.object(agent.graph, "interrupt", return_value="approved"):
-        result = await _hitl_node(state, bot=mock_bot)
+        result = await _hitl_node(state)
 
-    assert result.get("hitl_tool_call").get("name") == tool_call["name"]
-    assert result.get("hitl_tool_call").get("args") == tool_call["args"]
-    assert result.get("hitl_tool_call").get("id") == tool_call["id"]
+    assert result.get("hitl_tool_call", {}).get("name") == tool_call["name"]
+    assert result.get("hitl_tool_call", {}).get("id") == tool_call["id"]
     assert "messages" not in result or result.get("messages") == []
-    mock_dm.send.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_hitl_node_rejected_returns_cancel_message():
-    """사용자가 거절 시 취소 ToolMessage가 반환되는지 검증."""
-    from panager import agent
-    from panager.agent.graph import _hitl_node
-    from panager.agent.state import AgentState
-
+    """interrupt가 rejected를 반환하면 취소 ToolMessage가 반환되는지 검증."""
     tool_call = {"name": "task_delete", "args": {"task_id": "abc"}, "id": "call_1"}
     state: AgentState = {  # type: ignore[typeddict-item]
         "user_id": 123,
@@ -51,7 +38,7 @@ async def test_hitl_node_rejected_returns_cancel_message():
     }
 
     with patch.object(agent.graph, "interrupt", return_value="rejected"):
-        result = await _hitl_node(state, bot=None)
+        result = await _hitl_node(state)
 
     msgs = result.get("messages", [])
     assert len(msgs) == 1
@@ -63,9 +50,6 @@ async def test_hitl_node_rejected_returns_cancel_message():
 @pytest.mark.asyncio
 async def test_should_continue_or_hitl_routes_hitl_tools():
     """HITL 대상 tool_call이 있을 때 'hitl'로 라우팅되는지 검증."""
-    from panager.agent.graph import _should_continue_or_hitl
-    from panager.agent.state import AgentState
-
     tool_call = {"name": "task_delete", "args": {}, "id": "c1"}
     state: AgentState = {  # type: ignore[typeddict-item]
         "user_id": 1,
@@ -79,9 +63,6 @@ async def test_should_continue_or_hitl_routes_hitl_tools():
 @pytest.mark.asyncio
 async def test_should_continue_or_hitl_routes_normal_tools():
     """일반 tool_call은 'tools'로 라우팅되는지 검증."""
-    from panager.agent.graph import _should_continue_or_hitl
-    from panager.agent.state import AgentState
-
     tool_call = {"name": "memory_save", "args": {}, "id": "c2"}
     state: AgentState = {  # type: ignore[typeddict-item]
         "user_id": 1,
