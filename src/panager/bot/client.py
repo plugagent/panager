@@ -112,7 +112,10 @@ class PanagerBot(discord.Client):
         # 인증 완료 큐 처리 백그라운드 태스크
         asyncio.create_task(self._process_auth_queue())
         # 임베딩 모델 워밍업 (첫 사용 시 cold start 제거)
-        asyncio.create_task(_warmup_embedding_model())
+        try:
+            asyncio.create_task(_warmup_embedding_model())
+        except Exception:
+            log.warning("임베딩 모델 워밍업 실패 (봇은 계속 시작)", exc_info=True)
 
         log.info("봇 설정 완료")
 
