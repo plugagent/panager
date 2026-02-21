@@ -38,3 +38,9 @@ class ConfirmView(discord.ui.View):
             {"thread_id": self.thread_id, "resume": "rejected"}
         )
         self.stop()
+
+    async def on_timeout(self) -> None:
+        """5분 타임아웃 시 자동으로 거절 처리."""
+        self.bot.hitl_queue.put_nowait(
+            {"thread_id": self.thread_id, "resume": "rejected"}
+        )
