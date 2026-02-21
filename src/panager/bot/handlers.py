@@ -8,6 +8,7 @@ from typing import Any
 import discord
 from langchain_core.messages import AIMessageChunk, HumanMessage
 
+from panager.bot.views import ConfirmView, HITL_TOOL_LABELS
 from panager.db.connection import get_pool
 
 log = logging.getLogger(__name__)
@@ -77,7 +78,6 @@ async def handle_dm(message: discord.Message, bot: Any, graph: Any) -> None:
     user_id = message.author.id
     pool = get_pool()
 
-    # 신규 사용자 등록 (없으면 INSERT, 있으면 무시)
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -88,8 +88,16 @@ async def handle_dm(message: discord.Message, bot: Any, graph: Any) -> None:
             str(message.author),
         )
 
-    # 에이전트 실행
     config = {"configurable": {"thread_id": str(user_id)}}
+
+    # interrupt 대기 중인지 확인
+    snapshot = await graph.aget_state(config)
+    if snapshot.next:
+        await message.channel.send(
+            "이전 작업 확인을 기다리고 있어요. 위의 버튼을 눌러주세요."
+        )
+        return
+
     state = {
         "user_id": user_id,
         "username": str(message.author),
@@ -99,3 +107,22 @@ async def handle_dm(message: discord.Message, bot: Any, graph: Any) -> None:
     }
 
     await _stream_agent_response(graph, state, config, message.channel)
+
+    # 실행 후 interrupt 발생 여부 확인 (HITL 툴 호출 시)
+    snapshot_after = await graph.aget_state(config)
+    if snapshot_after.next:
+        try:
+            tool_call = snapshot_after.tasks[0].interrupts[0].value["tool_call"]
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            label = HITL_TOOL_LABELS.get(tool_name, tool_name)
+            args_text = "\n".join(f"  {k}: {v}" for k, v in tool_args.items())
+            confirm_text = (
+                f"패니저가 다음 작업을 실행하려 합니다:\n\n"
+                f"**{label}**\n{args_text}\n\n"
+                "진행하시겠습니까?"
+            )
+            view = ConfirmView(thread_id=str(user_id), bot=bot)
+            await message.channel.send(confirm_text, view=view)
+        except Exception as exc:
+            log.warning("HITL 확인 메시지 전송 실패: %s", exc)
