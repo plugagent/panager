@@ -198,7 +198,7 @@ def _make_tool_node(bot):
 
             tool_messages.append(ToolMessage(content=str(result), tool_call_id=tool_id))
 
-        return {"messages": tool_messages}
+        return {"messages": tool_messages, "hitl_tool_call": None}
 
     return _tool_node
 
