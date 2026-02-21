@@ -18,7 +18,7 @@ STREAM_DEBOUNCE = 0.2  # seconds — Discord rate limit 대응
 
 async def _stream_agent_response(
     graph: Any,
-    state: dict,
+    state: Any,  # dict (새 실행) 또는 Command (resume)
     config: dict,
     channel: discord.abc.Messageable,
 ) -> None:

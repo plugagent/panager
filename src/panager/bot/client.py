@@ -155,6 +155,8 @@ class PanagerBot(discord.Client):
                 log.exception("인증 후 재실행 실패: %s", exc)
 
     async def _process_hitl_queue(self) -> None:
+        from panager.bot.handlers import _stream_agent_response
+
         while not self._shutdown_event.is_set():
             try:
                 event = await asyncio.wait_for(self.hitl_queue.get(), timeout=1.0)
@@ -164,7 +166,14 @@ class PanagerBot(discord.Client):
             resume: str = event["resume"]
             config = {"configurable": {"thread_id": thread_id}}
             try:
-                await self.graph.ainvoke(Command(resume=resume), config)
+                user = await self.fetch_user(int(thread_id))
+                dm = await user.create_dm()
+                await _stream_agent_response(
+                    self.graph,
+                    Command(resume=resume),
+                    config,
+                    dm,
+                )
             except Exception as exc:
                 log.exception("HITL resume 실패: %s", exc)
 
