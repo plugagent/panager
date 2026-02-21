@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -24,12 +25,17 @@ async def _stream_agent_response(
     LangGraph graph를 스트리밍 모드로 실행하고,
     Discord 채널에 점진적으로 메시지를 전송/수정한다.
 
-    - 첫 토큰 수신 시 '▌' 초기 메시지 전송
+    - channel.send()와 graph.astream()을 동시에 시작해 Discord API
+      왕복 latency를 LLM 준비 시간과 겹친다.
+    - 첫 AI 청크 수신 시 send_task를 await해 sent_message를 확보한다.
     - 200ms 디바운스로 edit() 호출 (rate limit 대응)
     - 스트림 종료 후 커서 제거한 최종 텍스트로 edit()
     """
-    # LLM 응답 전에 즉시 대기 문구 전송
-    sent_message = await channel.send("생각하는 중...")
+    # channel.send와 graph.astream을 동시에 시작
+    send_task: asyncio.Task[discord.Message] = asyncio.create_task(
+        channel.send("생각하는 중...")
+    )
+    sent_message: discord.Message | None = None
     accumulated = ""
     last_edit_at = 0.0
 
@@ -43,6 +49,10 @@ async def _stream_agent_response(
         if not isinstance(chunk.content, str):
             continue
 
+        # 첫 청크 도착 시 send_task 완료 대기 (이미 완료돼 있을 가능성 높음)
+        if sent_message is None:
+            sent_message = await send_task
+
         accumulated += chunk.content
 
         # 디바운스: 마지막 edit 이후 DEBOUNCE 초 이상 경과 시에만 edit
@@ -50,6 +60,10 @@ async def _stream_agent_response(
         if now - last_edit_at >= STREAM_DEBOUNCE:
             await sent_message.edit(content=accumulated + "▌")
             last_edit_at = now
+
+    # 빈 스트림이거나 send가 아직 완료 안 된 경우 보장
+    if sent_message is None:
+        sent_message = await send_task
 
     # 최종 edit: 커서 제거
     final_text = accumulated.strip() or "(응답을 받지 못했습니다.)"
