@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import logging
 import zoneinfo
 from datetime import datetime
 from functools import lru_cache
@@ -15,14 +16,18 @@ from langchain_core.messages import (
 )
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import interrupt
 from pydantic import SecretStr
 
 from panager.agent.state import AgentState
+from panager.bot.views import ConfirmView, HITL_TOOL_LABELS
 from panager.config import Settings
 from panager.google.auth import get_auth_url
 from panager.google.credentials import GoogleAuthRequired
 from panager.memory.tool import make_memory_save, make_memory_search
 from panager.scheduler.tool import make_schedule_cancel, make_schedule_create
+
+log = logging.getLogger(__name__)
 
 
 @lru_cache
@@ -120,6 +125,49 @@ async def _agent_node(state: AgentState, bot: Any = None) -> dict[str, list[Any]
     return {"messages": [response]}
 
 
+async def _hitl_node(state: AgentState, bot: Any = None) -> dict:
+    """HITL 대상 tool call 전 사용자 확인을 요청하고 interrupt()로 대기한다."""
+    last_message = state["messages"][-1]
+    tool_call = last_message.tool_calls[0]  # type: ignore[union-attr]
+    tool_name = tool_call["name"]
+    tool_args = tool_call["args"]
+
+    label = HITL_TOOL_LABELS.get(tool_name, tool_name)
+    args_text = "\n".join(f"  {k}: {v}" for k, v in tool_args.items())
+    confirm_text = (
+        f"패니저가 다음 작업을 실행하려 합니다:\n\n"
+        f"**{label}**\n{args_text}\n\n"
+        "진행하시겠습니까?"
+    )
+
+    if bot is not None:
+        user_id = state["user_id"]
+        thread_id = str(user_id)
+        try:
+            user = await bot.fetch_user(user_id)
+            dm = await user.create_dm()
+            view = ConfirmView(thread_id=thread_id, bot=bot)
+            await dm.send(confirm_text, view=view)
+        except Exception as exc:
+            log.warning("HITL 확인 메시지 전송 실패: %s", exc)
+            cancel_msg = ToolMessage(
+                content="사용자에게 확인 메시지를 전송할 수 없습니다. DM을 확인해주세요.",
+                tool_call_id=tool_call["id"],
+            )
+            return {"messages": [cancel_msg], "hitl_tool_call": None}
+
+    decision = interrupt({"tool_call": tool_call})
+
+    if decision == "approved":
+        return {"hitl_tool_call": tool_call}
+    else:
+        cancel_msg = ToolMessage(
+            content="사용자가 작업을 취소했습니다.",
+            tool_call_id=tool_call["id"],
+        )
+        return {"messages": [cancel_msg], "hitl_tool_call": None}
+
+
 def _make_tool_node(bot):
     async def _tool_node(state: AgentState) -> dict:
         if not state["messages"]:
@@ -134,7 +182,13 @@ def _make_tool_node(bot):
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
             return {"messages": tool_messages}
 
-        for tool_call in last_message.tool_calls:
+        tool_calls = last_message.tool_calls
+
+        approved_call = state.get("hitl_tool_call")
+        if approved_call:
+            tool_calls = [tc for tc in tool_calls if tc["id"] == approved_call["id"]]
+
+        for tool_call in tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
             tool_id = tool_call["id"]
@@ -172,21 +226,46 @@ def _make_tool_node(bot):
     return _tool_node
 
 
-def _should_continue(state: AgentState) -> str:
+_HITL_TOOLS: frozenset[str] = frozenset(
+    {
+        "schedule_create",
+        "recurring_event_create",
+        "task_delete",
+    }
+)
+
+
+def _should_continue_or_hitl(state: AgentState) -> str:
     if not state["messages"]:
         return END
     last_message = state["messages"][-1]
-    if isinstance(last_message, AIMessage) and last_message.tool_calls:
-        return "tools"
-    return END
+    if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+        return END
+    first_tool = last_message.tool_calls[0]["name"]
+    if first_tool in _HITL_TOOLS:
+        return "hitl"
+    return "tools"
 
 
 def build_graph(checkpointer: Any, bot: Any = None) -> Any:
     graph = StateGraph(AgentState)
     agent_node = functools.partial(_agent_node, bot=bot)
+    hitl_node = functools.partial(_hitl_node, bot=bot)
+
     graph.add_node("agent", agent_node)
+    graph.add_node("hitl", hitl_node)
     graph.add_node("tools", _make_tool_node(bot))
+
     graph.add_edge(START, "agent")
-    graph.add_conditional_edges("agent", _should_continue)
+    graph.add_conditional_edges(
+        "agent",
+        _should_continue_or_hitl,
+        {"tools": "tools", "hitl": "hitl", END: END},
+    )
+    graph.add_conditional_edges(
+        "hitl",
+        lambda s: "tools" if s.get("hitl_tool_call") else "agent",
+    )
     graph.add_edge("tools", "agent")
+
     return graph.compile(checkpointer=checkpointer)

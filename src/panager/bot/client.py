@@ -11,6 +11,7 @@ import psycopg
 import uvicorn
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.types import Command
 
 from panager.agent.graph import build_graph
 from panager.bot.handlers import handle_dm, _stream_agent_response
@@ -88,6 +89,8 @@ class PanagerBot(discord.Client):
             asyncio.Queue()
         )
         self.pending_messages: dict[int, str] = {}
+        self.hitl_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
+        self._shutdown_event: asyncio.Event = asyncio.Event()
 
     async def setup_hook(self) -> None:
         await init_pool(settings.postgres_dsn_asyncpg)
@@ -111,6 +114,8 @@ class PanagerBot(discord.Client):
         asyncio.create_task(self._run_api())
         # 인증 완료 큐 처리 백그라운드 태스크
         asyncio.create_task(self._process_auth_queue())
+        # HITL 확인 큐 처리 백그라운드 태스크
+        asyncio.create_task(self._process_hitl_queue())
         # 임베딩 모델 워밍업 (첫 사용 시 cold start 제거)
         try:
             asyncio.create_task(_warmup_embedding_model())
@@ -149,6 +154,20 @@ class PanagerBot(discord.Client):
             except Exception as exc:
                 log.exception("인증 후 재실행 실패: %s", exc)
 
+    async def _process_hitl_queue(self) -> None:
+        while not self._shutdown_event.is_set():
+            try:
+                event = await asyncio.wait_for(self.hitl_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+            thread_id: str = event["thread_id"]
+            resume: str = event["resume"]
+            config = {"configurable": {"thread_id": thread_id}}
+            try:
+                await self.graph.ainvoke(Command(resume=resume), config)
+            except Exception as exc:
+                log.exception("HITL resume 실패: %s", exc)
+
     async def on_ready(self) -> None:
         log.info("봇 시작 완료: %s", str(self.user))
 
@@ -160,6 +179,7 @@ class PanagerBot(discord.Client):
         await handle_dm(message, self, self.graph)
 
     async def close(self) -> None:
+        self._shutdown_event.set()
         scheduler = get_scheduler()
         if scheduler.running:
             scheduler.shutdown(wait=False)
