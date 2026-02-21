@@ -41,6 +41,15 @@ class EventDeleteInput(BaseModel):
     calendar_id: str = "primary"
 
 
+class RecurringEventCreateInput(BaseModel):
+    title: str
+    start_at: str  # ISO 8601, e.g. "2026-02-23T10:00:00+09:00"
+    end_at: str  # ISO 8601
+    rrule: str  # RFC 5545 RRULE, e.g. "RRULE:FREQ=WEEKLY;BYDAY=MO"
+    calendar_id: str = "primary"
+    description: str | None = None
+
+
 def make_event_list(user_id: int):
     @tool(args_schema=EventListInput)
     async def event_list(days_ahead: int = 7) -> str:
@@ -164,3 +173,35 @@ def make_event_delete(user_id: int):
         return f"이벤트가 삭제되었습니다: {event_id}"
 
     return event_delete
+
+
+def make_recurring_event_create(user_id: int) -> Any:
+    @tool(args_schema=RecurringEventCreateInput)
+    async def recurring_event_create(
+        title: str,
+        start_at: str,
+        end_at: str,
+        rrule: str,
+        calendar_id: str = "primary",
+        description: str | None = None,
+    ) -> str:
+        """Google Calendar에 반복 이벤트를 추가합니다. rrule은 RFC 5545 RRULE 형식입니다.
+        예: RRULE:FREQ=DAILY, RRULE:FREQ=WEEKLY;BYDAY=MO, RRULE:FREQ=MONTHLY;BYMONTHDAY=1"""
+        creds = await _get_valid_credentials(user_id)
+        service = _build_service(creds)
+        body: dict = {
+            "summary": title,
+            "start": {"dateTime": start_at},
+            "end": {"dateTime": end_at},
+            "recurrence": [rrule],
+        }
+        if description:
+            body["description"] = description
+        created = await _execute(
+            service.events().insert(calendarId=calendar_id, body=body)
+        )
+        if created is None:
+            return "반복 이벤트 추가에 실패했습니다."
+        return f"반복 이벤트가 추가되었습니다: {created.get('summary')} (id={created.get('id')})"
+
+    return recurring_event_create

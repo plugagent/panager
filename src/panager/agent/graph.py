@@ -53,6 +53,7 @@ def _build_tools(user_id: int, bot: Any = None) -> list[Any]:
         make_event_delete,
         make_event_list,
         make_event_update,
+        make_recurring_event_create,
     )
 
     return [
@@ -68,6 +69,7 @@ def _build_tools(user_id: int, bot: Any = None) -> list[Any]:
         make_event_create(user_id),
         make_event_update(user_id),
         make_event_delete(user_id),
+        make_recurring_event_create(user_id),
     ]
 
 
@@ -97,6 +99,11 @@ async def _agent_node(state: AgentState, bot: Any = None) -> dict[str, list[Any]
         f"현재 날짜/시간: {now_str} ({tz_name})\n"
         "날짜/시간 관련 요청은 반드시 위 현재 시각 기준으로 ISO 8601 형식으로 변환하세요. "
         f"예: {now.strftime('%Y')}-MM-DDTHH:MM:SS{utc_offset}\n\n"
+        "반복 이벤트 생성 시 rrule 형식 예시:\n"
+        "  매일: RRULE:FREQ=DAILY\n"
+        "  매주 월요일: RRULE:FREQ=WEEKLY;BYDAY=MO\n"
+        "  매월 1일: RRULE:FREQ=MONTHLY;BYMONTHDAY=1\n"
+        "  평일 매일: RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR\n\n"
         f"관련 메모리:\n{state.get('memory_context', '없음')}"
     )
     trimmed_messages = trim_messages(
