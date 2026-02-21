@@ -6,7 +6,11 @@ from unittest.mock import AsyncMock, patch
 async def test_memory_save_tool():
     with (
         patch("panager.memory.tool.save_memory", new_callable=AsyncMock) as mock_save,
-        patch("panager.memory.tool._get_embedding", return_value=[0.1] * 768),
+        patch(
+            "panager.memory.tool._get_embedding_async",
+            new_callable=AsyncMock,
+            return_value=[0.1] * 768,
+        ),
     ):
         mock_save.return_value = "test-uuid"
 
@@ -24,7 +28,11 @@ async def test_memory_search_tool():
         patch(
             "panager.memory.tool.search_memories", new_callable=AsyncMock
         ) as mock_search,
-        patch("panager.memory.tool._get_embedding", return_value=[0.1] * 768),
+        patch(
+            "panager.memory.tool._get_embedding_async",
+            new_callable=AsyncMock,
+            return_value=[0.1] * 768,
+        ),
     ):
         mock_search.return_value = ["오늘 회의 참석"]
 

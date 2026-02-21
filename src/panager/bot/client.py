@@ -17,6 +17,7 @@ from panager.bot.handlers import handle_dm, _stream_agent_response
 from panager.config import Settings
 from panager.db.connection import close_pool, init_pool
 from panager.logging import configure_logging
+from panager.memory.tool import _warmup_embedding_model
 from panager.scheduler.runner import get_scheduler, restore_pending_schedules
 
 log = logging.getLogger(__name__)
@@ -110,6 +111,8 @@ class PanagerBot(discord.Client):
         asyncio.create_task(self._run_api())
         # 인증 완료 큐 처리 백그라운드 태스크
         asyncio.create_task(self._process_auth_queue())
+        # 임베딩 모델 워밍업 (첫 사용 시 cold start 제거)
+        asyncio.create_task(_warmup_embedding_model())
 
         log.info("봇 설정 완료")
 
