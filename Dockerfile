@@ -2,7 +2,8 @@ FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim
 
 WORKDIR /app
 
-ENV HF_HOME=/root/.cache/huggingface
+ENV XDG_CACHE_HOME=/home/panager/.cache
+ENV HF_HOME=/home/panager/.cache/huggingface
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
@@ -20,9 +21,7 @@ COPY --chown=panager:panager alembic.ini pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
 
-RUN --mount=type=cache,target=/root/.cache/huggingface \
-    HF_HOME=/root/.cache/huggingface \
-    uv run python -c \
+RUN uv run python -c \
     "from sentence_transformers import SentenceTransformer; \
      SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')"
 
