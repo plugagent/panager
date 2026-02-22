@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 import logging
 import zoneinfo
@@ -149,9 +150,9 @@ def _make_tool_node(
         tool_map = {t.name: t for t in tools}
 
         last_message = state["messages"][-1]
-        tool_messages: list[ToolMessage] = []
+        tool_calls = last_message.tool_calls
 
-        for tool_call in last_message.tool_calls:
+        async def _invoke_tool(tool_call):
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
             tool_id = tool_call["id"]
@@ -181,9 +182,12 @@ def _make_tool_node(
                 except Exception as exc:
                     result = f"오류 발생: {exc}"
 
-            tool_messages.append(ToolMessage(content=str(result), tool_call_id=tool_id))
+            return ToolMessage(content=str(result), tool_call_id=tool_id)
 
-        return {"messages": tool_messages}
+        # 모든 도구 호출을 병렬로 실행
+        tool_messages = await asyncio.gather(*[_invoke_tool(tc) for tc in tool_calls])
+
+        return {"messages": list(tool_messages)}
 
     return _tool_node
 
