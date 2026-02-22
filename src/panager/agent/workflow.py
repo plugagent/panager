@@ -18,7 +18,7 @@ from langgraph.graph import END, START, StateGraph
 
 from panager.agent.state import AgentState
 from panager.core.config import Settings
-from panager.integrations.google_client import GoogleAuthRequired
+from panager.core.exceptions import GoogleAuthRequired
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver

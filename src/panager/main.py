@@ -25,7 +25,11 @@ log = logging.getLogger(__name__)
 
 
 def _ttl_cutoff_uuid(ttl_days: int) -> str:
-    """TTL 기준 시각을 UUIDv7 하한 문자열로 반환."""
+    """TTL 기준 시각을 UUIDv7 하한 문자열로 반환.
+
+    LangGraph의 AsyncPostgresSaver는 체크포인트 ID로 UUIDv7을 사용하므로,
+    비트 조작을 통해 특정 시점 이전의 UUID 하한선을 생성하여 효율적으로 삭제합니다.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
     ms = int(cutoff.timestamp() * 1000)
     # UUIDv7 layout: 48비트 ms | 4비트 version(0111) | 12비트 rand_a | 2비트 variant(10) | 62비트 rand_b
@@ -78,7 +82,6 @@ async def main() -> None:
     log.info("애플리케이션 시작 중...")
 
     # 1. DB pool 초기화 (asyncpg용)
-    # Task 7 Note: user prompt mentioned db/pool.py, but using db/connection.py as per existing structure
     pool = await init_pool(settings.postgres_dsn_asyncpg)
 
     # 2. psycopg 연결 및 Checkpointer 설정 (LangGraph용)

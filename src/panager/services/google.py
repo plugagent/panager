@@ -13,7 +13,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from panager.core.config import Settings
-from panager.integrations.google_client import GoogleAuthRequired
+from panager.core.exceptions import GoogleAuthRequired
 
 if TYPE_CHECKING:
     from googleapiclient.discovery import Resource

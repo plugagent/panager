@@ -6,11 +6,9 @@ from typing import Any
 
 from googleapiclient.errors import HttpError
 
+from panager.core.exceptions import GoogleAuthRequired
+
 log = logging.getLogger(__name__)
-
-
-class GoogleAuthRequired(Exception):
-    """Google 계정 미연동 또는 scope 부족 시 발생하는 예외."""
 
 
 class GoogleClient:
