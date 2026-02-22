@@ -176,7 +176,7 @@ def test_trim_messages_keeps_all_when_under_limit():
 async def test_agent_node_calls_trim_messages_with_correct_args():
     """_agent_node가 trim_messages를 올바른 인자로 호출하는지 검증."""
     from panager.agent.graph import _agent_node
-    from panager.config import Settings
+    from panager.core.config import Settings
 
     mock_response = AIMessage(content="안녕하세요!")
     mock_llm = MagicMock()

@@ -8,7 +8,7 @@ def test_configure_logging_adds_two_handlers():
     mock_settings.log_max_bytes = 1_048_576
     mock_settings.log_backup_count = 3
 
-    from panager.logging import configure_logging
+    from panager.core.logging import configure_logging
 
     configure_logging(mock_settings)
 

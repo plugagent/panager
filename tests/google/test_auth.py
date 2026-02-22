@@ -2,7 +2,7 @@ from unittest.mock import patch, MagicMock
 
 
 def test_get_auth_url():
-    from panager.config import Settings
+    from panager.core.config import Settings
 
     mock_settings = MagicMock(spec=Settings)
     mock_settings.google_client_id = "test_client_id"

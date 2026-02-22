@@ -13,9 +13,9 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from panager.agent.graph import build_graph
 from panager.bot.handlers import handle_dm, _stream_agent_response
-from panager.config import Settings
+from panager.core.config import Settings
 from panager.db.connection import close_pool, init_pool
-from panager.logging import configure_logging
+from panager.core.logging import configure_logging
 from panager.scheduler.runner import get_scheduler, restore_pending_schedules
 
 log = logging.getLogger(__name__)

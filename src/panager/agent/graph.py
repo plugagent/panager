@@ -18,7 +18,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
 from panager.agent.state import AgentState
-from panager.config import Settings
+from panager.core.config import Settings
 from panager.google.auth import get_auth_url
 from panager.google.credentials import GoogleAuthRequired
 from panager.memory.tool import make_memory_save, make_memory_search

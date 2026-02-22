@@ -12,7 +12,7 @@ def test_settings_loads_from_env(monkeypatch):
     monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://localhost/callback")
     monkeypatch.setenv("LOG_FILE_PATH", "/tmp/test.log")
 
-    from panager.config import Settings
+    from panager.core.config import Settings
 
     settings = Settings()
     assert settings.discord_token == "test_token"
@@ -33,7 +33,7 @@ def test_postgres_dsn_property(monkeypatch):
     monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://localhost/callback")
     monkeypatch.setenv("LOG_FILE_PATH", "/tmp/test.log")
 
-    from panager.config import Settings
+    from panager.core.config import Settings
 
     settings = Settings()
     assert "panager:secret@localhost:5432/panager" in settings.postgres_dsn
