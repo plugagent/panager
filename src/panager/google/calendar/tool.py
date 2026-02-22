@@ -1,17 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
-
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
+from typing import TYPE_CHECKING
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
-from panager.google.credentials import _execute, _get_valid_credentials
-
-
-def _build_service(creds: Credentials):
-    return build("calendar", "v3", credentials=creds)
+if TYPE_CHECKING:
+    from panager.services.google import GoogleService
 
 
 class EventListInput(BaseModel):
@@ -40,32 +36,35 @@ class EventDeleteInput(BaseModel):
     calendar_id: str = "primary"
 
 
-def make_event_list(user_id: int):
+def make_event_list(user_id: int, google_service: GoogleService):
     @tool(args_schema=EventListInput)
     async def event_list(days_ahead: int = 7) -> str:
         """Google Calendar에서 앞으로 N일 이내의 이벤트를 모든 캘린더에서 조회합니다."""
-        creds = await _get_valid_credentials(user_id)
-        service = _build_service(creds)
+        service = await google_service.get_calendar_service(user_id)
 
         now = datetime.now(timezone.utc)
         time_min = now.isoformat()
         time_max = (now + timedelta(days=days_ahead)).isoformat()
 
-        calendars_result = await _execute(service.calendarList().list()) or {}
+        calendars_result = (
+            await asyncio.to_thread(service.calendarList().list().execute) or {}
+        )
         calendars = calendars_result.get("items", [])
         events: list[str] = []
 
         for cal in calendars:
             cal_id = cal["id"]
             result = (
-                await _execute(
-                    service.events().list(
+                await asyncio.to_thread(
+                    service.events()
+                    .list(
                         calendarId=cal_id,
                         timeMin=time_min,
                         timeMax=time_max,
                         singleEvents=True,
                         orderBy="startTime",
                     )
+                    .execute
                 )
                 or {}
             )
@@ -84,7 +83,7 @@ def make_event_list(user_id: int):
     return event_list
 
 
-def make_event_create(user_id: int):
+def make_event_create(user_id: int, google_service: GoogleService):
     @tool(args_schema=EventCreateInput)
     async def event_create(
         title: str,
@@ -94,8 +93,7 @@ def make_event_create(user_id: int):
         description: str | None = None,
     ) -> str:
         """Google Calendar에 새 이벤트를 추가합니다."""
-        creds = await _get_valid_credentials(user_id)
-        service = _build_service(creds)
+        service = await google_service.get_calendar_service(user_id)
 
         body: dict = {
             "summary": title,
@@ -106,7 +104,9 @@ def make_event_create(user_id: int):
             body["description"] = description
 
         created = (
-            await _execute(service.events().insert(calendarId=calendar_id, body=body))
+            await asyncio.to_thread(
+                service.events().insert(calendarId=calendar_id, body=body).execute
+            )
             or {}
         )
         return f"이벤트가 추가되었습니다: {created.get('summary')} (id={created.get('id')})"
@@ -114,7 +114,7 @@ def make_event_create(user_id: int):
     return event_create
 
 
-def make_event_update(user_id: int):
+def make_event_update(user_id: int, google_service: GoogleService):
     @tool(args_schema=EventUpdateInput)
     async def event_update(
         event_id: str,
@@ -125,8 +125,7 @@ def make_event_update(user_id: int):
         description: str | None = None,
     ) -> str:
         """Google Calendar 이벤트를 수정합니다. 변경할 필드만 전달하세요."""
-        creds = await _get_valid_credentials(user_id)
-        service = _build_service(creds)
+        service = await google_service.get_calendar_service(user_id)
 
         patch_body: dict = {}
         if title is not None:
@@ -141,24 +140,23 @@ def make_event_update(user_id: int):
         if not patch_body:
             return "수정할 필드를 하나 이상 지정해주세요."
 
-        await _execute(
-            service.events().patch(
-                calendarId=calendar_id, eventId=event_id, body=patch_body
-            )
+        await asyncio.to_thread(
+            service.events()
+            .patch(calendarId=calendar_id, eventId=event_id, body=patch_body)
+            .execute
         )
         return f"이벤트가 수정되었습니다: {event_id}"
 
     return event_update
 
 
-def make_event_delete(user_id: int):
+def make_event_delete(user_id: int, google_service: GoogleService):
     @tool(args_schema=EventDeleteInput)
     async def event_delete(event_id: str, calendar_id: str = "primary") -> str:
         """Google Calendar 이벤트를 삭제합니다."""
-        creds = await _get_valid_credentials(user_id)
-        service = _build_service(creds)
-        await _execute(
-            service.events().delete(calendarId=calendar_id, eventId=event_id)
+        service = await google_service.get_calendar_service(user_id)
+        await asyncio.to_thread(
+            service.events().delete(calendarId=calendar_id, eventId=event_id).execute
         )
         return f"이벤트가 삭제되었습니다: {event_id}"
 
