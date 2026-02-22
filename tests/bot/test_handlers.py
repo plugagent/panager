@@ -12,7 +12,7 @@ async def _make_fake_stream(*chunks: str):
 @pytest.mark.asyncio
 async def test_stream_builds_message_incrementally():
     """스트리밍 청크가 누적되어 최종 메시지에 반영되는지 검증."""
-    from panager.bot.handlers import _stream_agent_response
+    from panager.discord.handlers import _stream_agent_response
 
     mock_channel = MagicMock()
     sent_message = AsyncMock()
@@ -38,7 +38,7 @@ async def test_stream_builds_message_incrementally():
 @pytest.mark.asyncio
 async def test_stream_empty_response_sends_fallback():
     """LLM이 빈 응답을 반환할 때 fallback 메시지가 전송되는지 검증."""
-    from panager.bot.handlers import _stream_agent_response
+    from panager.discord.handlers import _stream_agent_response
 
     mock_channel = MagicMock()
     sent_message = AsyncMock()
@@ -61,7 +61,7 @@ async def test_stream_empty_response_sends_fallback():
 @pytest.mark.asyncio
 async def test_stream_sends_initial_cursor_message():
     """첫 토큰 수신 즉시 초기 메시지(▌)를 전송하는지 검증."""
-    from panager.bot.handlers import _stream_agent_response
+    from panager.discord.handlers import _stream_agent_response
 
     mock_channel = MagicMock()
     sent_message = AsyncMock()
