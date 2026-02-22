@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import psycopg
+from psycopg.rows import dict_row
 import uvicorn
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
@@ -81,12 +82,9 @@ async def main() -> None:
     pool = await init_pool(settings.postgres_dsn_asyncpg)
 
     # 2. psycopg 연결 및 Checkpointer 설정 (LangGraph용)
-    # AsyncPostgresSaver는 내부에서 row_factory를 설정할 수 있으므로 기본 연결을 사용하거나
-    # 명시적으로 호환되는 팩토리를 제공합니다.
     pg_conn = await psycopg.AsyncConnection.connect(
-        settings.postgres_dsn_asyncpg, autocommit=True
+        settings.postgres_dsn_asyncpg, autocommit=True, row_factory=dict_row
     )
-    # AsyncPostgresSaver는 내부적으로 자체 row factory를 사용할 수 있음
     checkpointer = AsyncPostgresSaver(pg_conn)
     await checkpointer.setup()
 

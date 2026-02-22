@@ -22,10 +22,12 @@ from panager.integrations.google_client import GoogleAuthRequired
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
+    from langgraph.graph.state import CompiledGraph
     from panager.agent.interfaces import UserSessionProvider
     from panager.services.google import GoogleService
     from panager.services.memory import MemoryService
     from panager.services.scheduler import SchedulerService
+
 
 log = logging.getLogger(__name__)
 
@@ -201,7 +203,7 @@ def build_graph(
     memory_service: MemoryService,
     google_service: GoogleService,
     scheduler_service: SchedulerService,
-) -> object:
+) -> CompiledGraph:
     settings = Settings()
     graph = StateGraph(AgentState)
 
