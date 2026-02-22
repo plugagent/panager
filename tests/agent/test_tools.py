@@ -1,5 +1,6 @@
+import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from panager.agent.tools import (
     make_memory_save,
     make_memory_search,
@@ -7,7 +8,8 @@ from panager.agent.tools import (
     make_schedule_cancel,
     make_task_list,
     make_task_create,
-    make_task_complete,
+    make_task_update,
+    make_task_delete,
     make_event_list,
     make_event_create,
     make_event_update,
@@ -36,9 +38,11 @@ async def test_memory_save_tool(mock_memory_service):
     mock_memory_service.save_memory = AsyncMock()
 
     tool = make_memory_save(user_id, mock_memory_service)
-    result = await tool.ainvoke({"content": "테스트 메모리"})
+    result_str = await tool.ainvoke({"content": "테스트 메모리"})
+    result = json.loads(result_str)
 
-    assert "저장" in result
+    assert result["status"] == "success"
+    assert "테스트 메모리" in result["content_preview"]
     mock_memory_service.save_memory.assert_called_once_with(user_id, "테스트 메모리")
 
 
@@ -50,24 +54,28 @@ async def test_memory_search_tool(mock_memory_service):
     )
 
     tool = make_memory_search(user_id, mock_memory_service)
-    result = await tool.ainvoke({"query": "검색어", "limit": 2})
+    result_str = await tool.ainvoke({"query": "검색어", "limit": 2})
+    result = json.loads(result_str)
 
-    assert "메모리 1" in result
-    assert "메모리 2" in result
+    assert result["status"] == "success"
+    assert len(result["results"]) == 2
+    assert "메모리 1" in result["results"]
     mock_memory_service.search_memories.assert_called_once_with(user_id, "검색어", 2)
 
 
 @pytest.mark.asyncio
 async def test_schedule_create_tool(mock_scheduler_service):
     user_id = 123
-    mock_scheduler_service.add_schedule = AsyncMock()
+    mock_scheduler_service.add_schedule = AsyncMock(return_value="job_123")
 
     tool = make_schedule_create(user_id, mock_scheduler_service)
-    result = await tool.ainvoke(
+    result_str = await tool.ainvoke(
         {"message": "알람", "trigger_at": "2026-02-22T12:00:00"}
     )
+    result = json.loads(result_str)
 
-    assert "예약" in result
+    assert result["status"] == "success"
+    assert result["schedule_id"] == "job_123"
     mock_scheduler_service.add_schedule.assert_called_once()
 
 
@@ -83,9 +91,11 @@ async def test_task_list_tool(mock_google_service):
     mock_google_service.get_tasks_service = AsyncMock(return_value=mock_service)
 
     tool = make_task_list(user_id, mock_google_service)
-    result = await tool.ainvoke({})
+    result_str = await tool.ainvoke({})
+    result = json.loads(result_str)
 
-    assert "할일 1" in result
+    assert result["status"] == "success"
+    assert result["tasks"][0]["title"] == "할일 1"
     mock_google_service.get_tasks_service.assert_called_once_with(user_id)
 
 
@@ -110,7 +120,9 @@ async def test_event_list_tool(mock_google_service):
     mock_google_service.get_calendar_service = AsyncMock(return_value=mock_service)
 
     tool = make_event_list(user_id, mock_google_service)
-    result = await tool.ainvoke({"days_ahead": 7})
+    result_str = await tool.ainvoke({"days_ahead": 7})
+    result = json.loads(result_str)
 
-    assert "일정 1" in result
+    assert result["status"] == "success"
+    assert result["events"][0]["summary"] == "일정 1"
     mock_google_service.get_calendar_service.assert_called_once_with(user_id)
