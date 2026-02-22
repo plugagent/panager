@@ -7,3 +7,4 @@ logs/
 *.egg-info/
 dist/
 .cache/
+10: .worktrees/
