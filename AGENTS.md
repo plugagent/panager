@@ -11,7 +11,7 @@ Guide for agentic coding agents working in this repository.
 - **Language:** Python 3.13+
 - **Package manager:** `uv` (always use `uv run ...`, never `python ...` directly)
 - **Layout:** src layout — package root is `src/panager/`
-- **Entrypoint:** `python -m panager.bot.client`
+- **Entrypoint:** `python -m panager.main`
 
 ---
 
@@ -36,13 +36,13 @@ make test
 POSTGRES_HOST=localhost POSTGRES_PORT=5433 uv run pytest -v
 
 # Single test file:
-POSTGRES_HOST=localhost POSTGRES_PORT=5433 uv run pytest tests/agent/test_graph.py -v
+POSTGRES_HOST=localhost POSTGRES_PORT=5433 uv run pytest tests/panager/agent/test_workflow.py -v
 
 # Single test function:
-POSTGRES_HOST=localhost POSTGRES_PORT=5433 uv run pytest tests/agent/test_graph.py::test_graph_builds_successfully -v
+POSTGRES_HOST=localhost POSTGRES_PORT=5433 uv run pytest tests/panager/agent/test_workflow.py::test_graph_builds_successfully -v
 
 # Tests that don't require DB (no env vars needed):
-uv run pytest tests/agent/ tests/bot/ tests/google/ tests/memory/test_tool.py tests/scheduler/test_tool.py tests/test_config.py tests/test_logging.py -v
+uv run pytest tests/panager/agent/ tests/panager/discord/ tests/panager/google/ tests/panager/services/ tests/test_config.py tests/test_logging.py -v
 ```
 
 **Note:** `tests/test_db_connection.py` and `tests/memory/test_repository.py` require a live PostgreSQL connection (use `make test` or `make db` first).
@@ -69,21 +69,24 @@ make down  # docker compose down
 
 ```
 src/panager/
-├── config.py          # pydantic-settings Settings class (env vars)
-├── logging.py         # structlog + stdlib logging setup
-├── bot/
-│   ├── client.py      # PanagerBot (discord.Client), setup_hook, main()
-│   └── handlers.py    # handle_dm(), _stream_agent_response()
-├── agent/
-│   ├── graph.py       # LangGraph StateGraph, _agent_node, build_graph()
+├── main.py            # Entrypoint
+├── core/              # Config, Logging, Exceptions
+│   ├── config.py
+│   ├── logging.py
+│   └── exceptions.py
+├── discord/           # Discord bot & handlers
+│   ├── bot.py
+│   └── handlers.py
+├── agent/             # LangGraph workflow & tools
+│   ├── workflow.py    # StateGraph definition
+│   ├── tools.py       # Agent tools
 │   └── state.py       # AgentState TypedDict
-├── api/               # FastAPI app (Google OAuth callback)
-├── db/
-│   └── connection.py  # asyncpg pool: init_pool / get_pool / close_pool
-├── memory/            # pgvector memory: save_memory / search_memories + tools
-├── google/            # OAuth flow, credentials, Calendar + Tasks tools
-└── scheduler/         # APScheduler + LangChain tools for scheduling
-tests/                 # mirrors src/ structure
+├── services/          # Business logic (Google, Memory, Scheduler)
+├── integrations/      # External API clients (Google, etc.)
+├── api/               # FastAPI app (OAuth callback)
+├── db/                # Database connection & migrations
+└── scheduler/         # Background tasks & runner
+tests/                 # mirrors src/panager/ structure
 docs/plans/            # implementation plan markdown files
 ```
 
@@ -105,7 +108,7 @@ from datetime import datetime, timezone
 import discord
 from langchain_core.messages import HumanMessage
 
-from panager.config import Settings
+from panager.core.config import Settings
 from panager.db.connection import get_pool
 ```
 
@@ -193,7 +196,7 @@ async def memory_save(content: str) -> str:
 
 - `asyncio_mode = "auto"` in `pyproject.toml` — all async tests run automatically.
 - Use `@pytest.mark.asyncio` on async test functions (explicit, even though auto mode is on).
-- Mock LLM calls with `MagicMock` / `AsyncMock`; use `unittest.mock.patch` to patch at the import site (e.g. `panager.agent.graph.trim_messages`).
+- Mock LLM calls with `MagicMock` / `AsyncMock`; use `unittest.mock.patch` to patch at the import site (e.g. `panager.agent.workflow.trim_messages`).
 - Tests that need DB fixtures: use `@pytest.fixture(autouse=True)` async fixtures.
 - Test files mirror the `src/panager/` structure under `tests/`.
 
@@ -201,7 +204,7 @@ async def memory_save(content: str) -> str:
 
 ## Configuration (Environment Variables)
 
-All config is via `pydantic-settings` `Settings` class (`src/panager/config.py`). Copy `.env.example` → `.env` for local dev.
+All config is via `pydantic-settings` `Settings` class (`src/panager/core/config.py`). Copy `.env.example` → `.env` for local dev.
 
 Key env vars: `DISCORD_TOKEN`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `POSTGRES_*`, `GOOGLE_CLIENT_*`, `GOOGLE_REDIRECT_URI`, `LOG_FILE_PATH`, `CHECKPOINT_MAX_TOKENS`, `CHECKPOINT_TTL_DAYS`.
 
