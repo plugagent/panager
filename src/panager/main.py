@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import psycopg
+from psycopg.rows import dict_row
 import uvicorn
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
@@ -71,7 +72,7 @@ async def main() -> None:
 
     # 2. psycopg 연결 및 Checkpointer 설정 (LangGraph용)
     pg_conn = await psycopg.AsyncConnection.connect(
-        settings.postgres_dsn_asyncpg, autocommit=True
+        settings.postgres_dsn_asyncpg, autocommit=True, row_factory=dict_row
     )
     checkpointer = AsyncPostgresSaver(pg_conn)
     await checkpointer.setup()
@@ -84,7 +85,7 @@ async def main() -> None:
 
     # 4. 서비스 레이어 초기화
     memory_service = MemoryService(pool)
-    google_service = GoogleService(settings)
+    google_service = GoogleService(settings, pool)
     scheduler_service = SchedulerService(pool)
 
     # 5. Discord 봇 초기화 (UserSessionProvider 구현체)

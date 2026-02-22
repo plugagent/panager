@@ -21,7 +21,7 @@ async def _stream_agent_response(
 ) -> None:
     """에이전트 응답을 스트리밍하여 Discord에 전송합니다."""
     # LLM 응답 전에 대기 문구 전송
-    sent_message = await channel.send("생각하는 중...")
+    sent_messages: list[discord.Message] = [await channel.send("생각하는 중...")]
     accumulated = ""
     last_edit_at = 0.0
 
@@ -39,23 +39,41 @@ async def _stream_agent_response(
         # 디바운스: 스트리밍 중 주기적으로 메시지 업데이트
         now = time.monotonic()
         if now - last_edit_at >= STREAM_DEBOUNCE:
-            display_text = accumulated
-            # 2,000자 제한 확인 (커서와 안내 문구 포함 여유분)
-            if len(display_text) > MAX_MESSAGE_LENGTH - 100:
-                display_text = display_text[: MAX_MESSAGE_LENGTH - 100] + "... (생략)"
+            # 현재 메시지 인덱스와 해당 메시지에 들어갈 내용 계산
+            current_msg_index = len(accumulated) // MAX_MESSAGE_LENGTH
+            current_msg_content = accumulated[current_msg_index * MAX_MESSAGE_LENGTH :]
 
-            await sent_message.edit(content=display_text + "▌")
+            # 필요한 경우 새 메시지 생성
+            while len(sent_messages) <= current_msg_index:
+                new_msg = await channel.send("...")
+                sent_messages.append(new_msg)
+
+            # 현재 메시지 업데이트 (커서 포함)
+            await sent_messages[current_msg_index].edit(
+                content=current_msg_content + "▌"
+            )
             last_edit_at = now
 
-    # 최종 응답 업데이트
-    final_text = accumulated.strip() or "(응답을 받지 못했습니다.)"
-    if len(final_text) > MAX_MESSAGE_LENGTH:
-        final_text = (
-            final_text[: MAX_MESSAGE_LENGTH - 50]
-            + "... (내용이 너무 길어 생략되었습니다.)"
-        )
+    # 최종 응답 업데이트 및 정리
+    full_text = accumulated.strip() or "(응답을 받지 못했습니다.)"
+    chunks = [
+        full_text[i : i + MAX_MESSAGE_LENGTH]
+        for i in range(0, len(full_text), MAX_MESSAGE_LENGTH)
+    ]
 
-    await sent_message.edit(content=final_text)
+    for i, content in enumerate(chunks):
+        if i < len(sent_messages):
+            await sent_messages[i].edit(content=content)
+        else:
+            await channel.send(content)
+
+    # 혹시 남은 대기 메시지가 있다면 삭제 (생각하는 중... 등이 남았을 경우)
+    if len(sent_messages) > len(chunks):
+        for msg in sent_messages[len(chunks) :]:
+            try:
+                await msg.delete()
+            except Exception:
+                pass
 
 
 async def handle_dm(message: discord.Message, graph: Any) -> None:

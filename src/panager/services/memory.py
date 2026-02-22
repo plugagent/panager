@@ -16,17 +16,25 @@ class MemoryService:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
         self._model: SentenceTransformer | None = None
+        self._lock = asyncio.Lock()
 
-    def _get_model(self) -> SentenceTransformer:
-        """SentenceTransformer 모델을 지연 로딩합니다."""
+    async def _get_model(self) -> SentenceTransformer:
+        """SentenceTransformer 모델을 비차단 방식으로 지연 로딩합니다."""
         if self._model is None:
-            # CPU 집약적인 모델 로딩은 처음 사용할 때 수행
-            self._model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+            async with self._lock:
+                # 더블 체크 로킹
+                if self._model is None:
+                    log.info("SentenceTransformer 모델 로딩 시작...")
+                    # 모델 로딩은 CPU 및 I/O 집약적이므로 별도 스레드에서 실행
+                    self._model = await asyncio.to_thread(
+                        SentenceTransformer, "paraphrase-multilingual-mpnet-base-v2"
+                    )
+                    log.info("SentenceTransformer 모델 로딩 완료.")
         return self._model
 
     async def _get_embedding(self, text: str) -> list[float]:
         """텍스트에 대한 임베딩을 비차단 방식으로 생성합니다."""
-        model = self._get_model()
+        model = await self._get_model()
         # CPU 집약적인 인코딩 작업을 별도 스레드에서 실행하여 이벤트 루프 차단 방지
         embedding = await asyncio.to_thread(model.encode, text)
         return embedding.tolist()
