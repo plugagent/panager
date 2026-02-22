@@ -3,7 +3,7 @@
 # 로컬 개발: test DB 올리고 봇 핫리로드 실행
 dev: db
 	POSTGRES_HOST=localhost POSTGRES_PORT=5433 \
-	uv run watchfiles "python -m panager.bot.client" src
+	uv run watchfiles "python -m panager.main" src
 
 # test DB 시작 (healthy 대기)
 db:
