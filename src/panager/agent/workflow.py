@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import functools
 import logging
 import zoneinfo
@@ -47,19 +46,19 @@ def _build_tools(
     scheduler_service: SchedulerService,
 ) -> list:
     """user_id를 클로저로 포함한 tool 인스턴스 목록을 반환합니다."""
-    from panager.google.calendar.tool import (
+    from panager.agent.tools import (
         make_event_create,
         make_event_delete,
         make_event_list,
         make_event_update,
-    )
-    from panager.google.tasks.tool import (
+        make_memory_save,
+        make_memory_search,
+        make_schedule_cancel,
+        make_schedule_create,
         make_task_complete,
         make_task_create,
         make_task_list,
     )
-    from panager.memory.tool import make_memory_save, make_memory_search
-    from panager.scheduler.tool import make_schedule_cancel, make_schedule_create
 
     return [
         make_memory_save(user_id, memory_service),

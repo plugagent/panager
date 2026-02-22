@@ -8,7 +8,6 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     import asyncpg
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 log = logging.getLogger(__name__)
 
