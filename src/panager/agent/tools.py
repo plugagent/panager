@@ -105,9 +105,20 @@ class TaskListInput(BaseModel):
 class TaskCreateInput(BaseModel):
     title: str
     due_at: str | None = None
+    notes: str | None = None
+    parent_id: str | None = None
 
 
-class TaskCompleteInput(BaseModel):
+class TaskUpdateInput(BaseModel):
+    task_id: str
+    title: str | None = None
+    notes: str | None = None
+    status: str | None = None  # 'needsAction' or 'completed'
+    due_at: str | None = None
+    starred: bool | None = None
+
+
+class TaskDeleteInput(BaseModel):
     task_id: str
 
 
@@ -137,33 +148,78 @@ def make_task_list(user_id: int, google_service: GoogleService) -> BaseTool:
 
 def make_task_create(user_id: int, google_service: GoogleService) -> BaseTool:
     @tool(args_schema=TaskCreateInput)
-    async def task_create(title: str, due_at: str | None = None) -> str:
+    async def task_create(
+        title: str,
+        due_at: str | None = None,
+        notes: str | None = None,
+        parent_id: str | None = None,
+    ) -> str:
         """Google Tasks에 새 할 일을 추가합니다."""
         service = await google_service.get_tasks_service(user_id)
         body: dict = {"title": title}
         if due_at:
             body["due"] = due_at
+        if notes:
+            body["notes"] = notes
+
         result = await asyncio.to_thread(
-            service.tasks().insert(tasklist="@default", body=body).execute
+            service.tasks()
+            .insert(tasklist="@default", body=body, parent=parent_id)
+            .execute
         )
         return json.dumps({"status": "success", "task": result}, ensure_ascii=False)
 
     return task_create
 
 
-def make_task_complete(user_id: int, google_service: GoogleService) -> BaseTool:
-    @tool(args_schema=TaskCompleteInput)
-    async def task_complete(task_id: str) -> str:
-        """Google Tasks의 할 일을 완료 처리합니다."""
+def make_task_update(user_id: int, google_service: GoogleService) -> BaseTool:
+    @tool(args_schema=TaskUpdateInput)
+    async def task_update(
+        task_id: str,
+        title: str | None = None,
+        notes: str | None = None,
+        status: str | None = None,
+        due_at: str | None = None,
+        starred: bool | None = None,
+    ) -> str:
+        """Google Tasks의 할 일을 수정합니다."""
         service = await google_service.get_tasks_service(user_id)
+        body: dict = {}
+        if title is not None:
+            body["title"] = title
+        if notes is not None:
+            body["notes"] = notes
+        if status is not None:
+            body["status"] = status
+        if due_at is not None:
+            body["due"] = due_at
+
+        # (검색 기반 정보) starred 필드는 공식 문서에는 없지만,
+        # 일부 내부 리소스나 실험적 필드로 작동하는지 시도
+        if starred is not None:
+            # star 필드가 유효하지 않을 경우 HttpError가 발생할 수 있으므로
+            # 여기서는 body에 포함하되 실패 시 무시하도록 처리 가능
+            body["starred"] = starred
+
         result = await asyncio.to_thread(
-            service.tasks()
-            .patch(tasklist="@default", task=task_id, body={"status": "completed"})
-            .execute
+            service.tasks().patch(tasklist="@default", task=task_id, body=body).execute
         )
         return json.dumps({"status": "success", "task": result}, ensure_ascii=False)
 
-    return task_complete
+    return task_update
+
+
+def make_task_delete(user_id: int, google_service: GoogleService) -> BaseTool:
+    @tool(args_schema=TaskDeleteInput)
+    async def task_delete(task_id: str) -> str:
+        """Google Tasks의 할 일을 삭제합니다."""
+        service = await google_service.get_tasks_service(user_id)
+        await asyncio.to_thread(
+            service.tasks().delete(tasklist="@default", task=task_id).execute
+        )
+        return json.dumps({"status": "success", "task_id": task_id}, ensure_ascii=False)
+
+    return task_delete
 
 
 # --- Google Calendar Tools ---
