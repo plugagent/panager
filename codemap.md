@@ -21,3 +21,15 @@ Panager is an agentic personal manager bot that resides in Discord DMs. It assis
 | `src/panager/discord/` | User interface layer; handles Discord DMs and streams agent responses in real-time. | [View Map](src/panager/discord/codemap.md) |
 | `src/panager/integrations/` | Low-level wrappers for external services (Google APIs) with robust error handling. | [View Map](src/panager/integrations/codemap.md) |
 | `src/panager/services/` | Business logic services for semantic memory (pgvector), Google APIs, and task scheduling. | [View Map](src/panager/services/codemap.md) |
+
+## System Data Flow
+
+1. **User Interaction**: User sends a DM to the Discord Bot (`discord/handlers.py`).
+2. **Context Resolution**: The handler retrieves the user's LangGraph thread and state from PostgreSQL.
+3. **Agent Reasoning**: The LangGraph state machine (`agent/workflow.py`) processes the message:
+   - **Memory Check**: Searches long-term memory (`services/memory.py`) for relevant past context.
+   - **LLM Call**: Decides whether to reply directly or use tools.
+4. **Tool Execution**: If needed, the agent calls tools (Calendar, Tasks, Scheduler) via `services/` and `integrations/`.
+5. **Streaming Output**: The agent's response is streamed back to Discord in real-time with debouncing.
+6. **State Persistence**: The conversation state and any new memories are saved back to PostgreSQL.
+
