@@ -3,15 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from panager.google.auth import exchange_code, get_auth_url
-from panager.google.repository import save_tokens
-
 router = APIRouter()
 
 
 @router.get("/google/login")
-async def google_login(user_id: int):
-    url = get_auth_url(user_id)
+async def google_login(request: Request, user_id: int):
+    bot = request.app.state.bot
+    url = bot.google_service.get_auth_url(user_id)
     return RedirectResponse(url)
 
 
@@ -19,10 +17,9 @@ async def google_login(user_id: int):
 async def google_callback(request: Request, code: str, state: str):
     try:
         user_id = int(state)
-        tokens = await exchange_code(code, user_id)
-        await save_tokens(user_id, tokens)
-
         bot = request.app.state.bot
+        await bot.google_service.exchange_code(code, user_id)
+
         pending = bot.pending_messages.get(user_id)
         await bot.auth_complete_queue.put(
             {
