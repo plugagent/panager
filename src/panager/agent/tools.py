@@ -109,10 +109,20 @@ def make_task_list(user_id: int, google_service: GoogleService) -> BaseTool:
     async def task_list() -> str:
         """Google Tasks의 할 일 목록을 조회합니다."""
         service = await google_service.get_tasks_service(user_id)
-        result = await asyncio.to_thread(
-            service.tasks().list(tasklist="@default").execute
-        )
-        items = result.get("items", [])
+        items = []
+        next_page_token = None
+
+        while True:
+            result = await asyncio.to_thread(
+                service.tasks()
+                .list(tasklist="@default", pageToken=next_page_token)
+                .execute
+            )
+            items.extend(result.get("items", []))
+            next_page_token = result.get("nextPageToken")
+            if not next_page_token:
+                break
+
         if not items:
             return "할 일이 없습니다."
         pending = [
@@ -205,27 +215,34 @@ def make_event_list(user_id: int, google_service: GoogleService) -> BaseTool:
 
         for cal in calendars:
             cal_id = cal["id"]
-            result = (
-                await asyncio.to_thread(
-                    service.events()
-                    .list(
-                        calendarId=cal_id,
-                        timeMin=time_min,
-                        timeMax=time_max,
-                        singleEvents=True,
-                        orderBy="startTime",
+            next_page_token = None
+            while True:
+                result = (
+                    await asyncio.to_thread(
+                        service.events()
+                        .list(
+                            calendarId=cal_id,
+                            timeMin=time_min,
+                            timeMax=time_max,
+                            singleEvents=True,
+                            orderBy="startTime",
+                            pageToken=next_page_token,
+                        )
+                        .execute
                     )
-                    .execute
+                    or {}
                 )
-                or {}
-            )
-            for evt in result.get("items", []):
-                start = evt.get("start", {}).get("dateTime") or evt.get(
-                    "start", {}
-                ).get("date", "")
-                title = evt.get("summary", "(제목 없음)")
-                evt_id = evt.get("id", "")
-                events.append(f"- [{start}] {title} (id={evt_id}, cal={cal_id})")
+                for evt in result.get("items", []):
+                    start = evt.get("start", {}).get("dateTime") or evt.get(
+                        "start", {}
+                    ).get("date", "")
+                    title = evt.get("summary", "(제목 없음)")
+                    evt_id = evt.get("id", "")
+                    events.append(f"- [{start}] {title} (id={evt_id}, cal={cal_id})")
+
+                next_page_token = result.get("nextPageToken")
+                if not next_page_token:
+                    break
 
         if not events:
             return f"앞으로 {days_ahead}일 이내 일정이 없습니다."

@@ -28,4 +28,4 @@ RUN --mount=type=cache,target=/root/.cache/huggingface \
 
 USER panager
 
-CMD ["uv", "run", "python", "-m", "panager.bot.client"]
+CMD ["uv", "run", "python", "-m", "panager.main"]

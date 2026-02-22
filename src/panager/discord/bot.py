@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage
 from panager.discord.handlers import _stream_agent_response, handle_dm
 
 if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledGraph
     from panager.services.google import GoogleService
     from panager.services.memory import MemoryService
     from panager.services.scheduler import SchedulerService
@@ -41,7 +42,7 @@ class PanagerBot(discord.Client):
         # 스케줄러 서비스에 알림 발송용 프로바이더로 자신을 등록
         self.scheduler_service.set_notification_provider(self)
 
-        self.graph = None  # main.py에서 생성 후 주입됨
+        self.graph: CompiledGraph | None = None  # main.py에서 생성 후 주입됨
         self.auth_complete_queue: asyncio.Queue = asyncio.Queue()
         self._pending_messages: Dict[int, str] = {}
 
