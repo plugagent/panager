@@ -114,7 +114,9 @@ async def _agent_node(
         f"현재 날짜/시간: {now_str} ({tz_name})\n"
         "날짜/시간 관련 요청은 반드시 위 현재 시각 기준으로 ISO 8601 형식으로 변환하세요. "
         f"예: {now.strftime('%Y')}-MM-DDTHH:MM:SS{utc_offset}\n\n"
-        f"관련 메모리:\n{state.get('memory_context', '없음')}"
+        f"관련 메모리:\n{state.get('memory_context', '없음')}\n\n"
+        "참고: 모든 도구의 실행 결과는 JSON 데이터 구조로 제공됩니다. "
+        "결과가 성공적(status: success)이라면 불필요한 재질문 없이 사용자에게 간결하게 보고하세요."
     )
     trimmed_messages = trim_messages(
         state["messages"],

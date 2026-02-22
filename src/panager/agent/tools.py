@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import tool
 from pydantic import BaseModel
@@ -34,7 +35,9 @@ def make_memory_save(user_id: int, memory_service: MemoryService) -> BaseTool:
     async def memory_save(content: str) -> str:
         """중요한 내용을 장기 메모리에 저장합니다."""
         await memory_service.save_memory(user_id, content)
-        return f"메모리에 저장했습니다: {content[:50]}"
+        return json.dumps(
+            {"status": "success", "content_preview": content[:50]}, ensure_ascii=False
+        )
 
     return memory_save
 
@@ -44,9 +47,7 @@ def make_memory_search(user_id: int, memory_service: MemoryService) -> BaseTool:
     async def memory_search(query: str, limit: int = 5) -> str:
         """사용자의 과거 대화/패턴에서 관련 내용을 검색합니다."""
         results = await memory_service.search_memories(user_id, query, limit)
-        if not results:
-            return "관련 메모리가 없습니다."
-        return "\n".join(f"- {r}" for r in results)
+        return json.dumps({"status": "success", "results": results}, ensure_ascii=False)
 
     return memory_search
 
@@ -68,8 +69,15 @@ def make_schedule_create(user_id: int, scheduler_service: SchedulerService) -> B
     async def schedule_create(message: str, trigger_at: str) -> str:
         """지정한 시간에 사용자에게 DM 알림을 예약합니다."""
         trigger_dt = datetime.fromisoformat(trigger_at)
-        await scheduler_service.add_schedule(user_id, message, trigger_dt)
-        return f"알림이 예약되었습니다: {trigger_at}에 '{message}'"
+        schedule_id = await scheduler_service.add_schedule(user_id, message, trigger_dt)
+        return json.dumps(
+            {
+                "status": "success",
+                "schedule_id": str(schedule_id),
+                "trigger_at": trigger_at,
+            },
+            ensure_ascii=False,
+        )
 
     return schedule_create
 
@@ -79,10 +87,9 @@ def make_schedule_cancel(user_id: int, scheduler_service: SchedulerService) -> B
     async def schedule_cancel(schedule_id: str) -> str:
         """예약된 알림을 취소합니다."""
         success = await scheduler_service.cancel_schedule(user_id, schedule_id)
-        if success:
-            return f"알림이 취소되었습니다: {schedule_id}"
-        return (
-            f"알림 취소에 실패했습니다 (이미 발송되었거나 권한이 없음): {schedule_id}"
+        return json.dumps(
+            {"status": "success" if success else "failed", "schedule_id": schedule_id},
+            ensure_ascii=False,
         )
 
     return schedule_cancel
@@ -123,16 +130,7 @@ def make_task_list(user_id: int, google_service: GoogleService) -> BaseTool:
             if not next_page_token:
                 break
 
-        if not items:
-            return "할 일이 없습니다."
-        pending = [
-            f"- [{item['id']}] {item['title']}"
-            for item in items
-            if item.get("status") == "needsAction"
-        ]
-        if not pending:
-            return "완료되지 않은 할 일이 없습니다."
-        return "\n".join(pending)
+        return json.dumps({"status": "success", "tasks": items}, ensure_ascii=False)
 
     return task_list
 
@@ -145,10 +143,10 @@ def make_task_create(user_id: int, google_service: GoogleService) -> BaseTool:
         body: dict = {"title": title}
         if due_at:
             body["due"] = due_at
-        await asyncio.to_thread(
+        result = await asyncio.to_thread(
             service.tasks().insert(tasklist="@default", body=body).execute
         )
-        return f"할 일이 추가되었습니다: {title}"
+        return json.dumps({"status": "success", "task": result}, ensure_ascii=False)
 
     return task_create
 
@@ -158,12 +156,12 @@ def make_task_complete(user_id: int, google_service: GoogleService) -> BaseTool:
     async def task_complete(task_id: str) -> str:
         """Google Tasks의 할 일을 완료 처리합니다."""
         service = await google_service.get_tasks_service(user_id)
-        await asyncio.to_thread(
+        result = await asyncio.to_thread(
             service.tasks()
             .patch(tasklist="@default", task=task_id, body={"status": "completed"})
             .execute
         )
-        return f"할 일이 완료 처리되었습니다: {task_id}"
+        return json.dumps({"status": "success", "task": result}, ensure_ascii=False)
 
     return task_complete
 
@@ -211,7 +209,7 @@ def make_event_list(user_id: int, google_service: GoogleService) -> BaseTool:
             await asyncio.to_thread(service.calendarList().list().execute) or {}
         )
         calendars = calendars_result.get("items", [])
-        events: list[str] = []
+        all_events: list[dict[str, Any]] = []
 
         for cal in calendars:
             cal_id = cal["id"]
@@ -232,21 +230,18 @@ def make_event_list(user_id: int, google_service: GoogleService) -> BaseTool:
                     )
                     or {}
                 )
-                for evt in result.get("items", []):
-                    start = evt.get("start", {}).get("dateTime") or evt.get(
-                        "start", {}
-                    ).get("date", "")
-                    title = evt.get("summary", "(제목 없음)")
-                    evt_id = evt.get("id", "")
-                    events.append(f"- [{start}] {title} (id={evt_id}, cal={cal_id})")
+                items = result.get("items", [])
+                for item in items:
+                    item["calendar_id"] = cal_id
+                all_events.extend(items)
 
                 next_page_token = result.get("nextPageToken")
                 if not next_page_token:
                     break
 
-        if not events:
-            return f"앞으로 {days_ahead}일 이내 일정이 없습니다."
-        return "\n".join(events)
+        return json.dumps(
+            {"status": "success", "events": all_events}, ensure_ascii=False
+        )
 
     return event_list
 
@@ -277,7 +272,7 @@ def make_event_create(user_id: int, google_service: GoogleService) -> BaseTool:
             )
             or {}
         )
-        return f"이벤트가 추가되었습니다: {created.get('summary')} (id={created.get('id')})"
+        return json.dumps({"status": "success", "event": created}, ensure_ascii=False)
 
     return event_create
 
@@ -306,14 +301,17 @@ def make_event_update(user_id: int, google_service: GoogleService) -> BaseTool:
             patch_body["description"] = description
 
         if not patch_body:
-            return "수정할 필드를 하나 이상 지정해주세요."
+            return json.dumps(
+                {"status": "error", "message": "수정할 필드를 하나 이상 지정해주세요."},
+                ensure_ascii=False,
+            )
 
-        await asyncio.to_thread(
+        result = await asyncio.to_thread(
             service.events()
             .patch(calendarId=calendar_id, eventId=event_id, body=patch_body)
             .execute
         )
-        return f"이벤트가 수정되었습니다: {event_id}"
+        return json.dumps({"status": "success", "event": result}, ensure_ascii=False)
 
     return event_update
 
@@ -326,6 +324,8 @@ def make_event_delete(user_id: int, google_service: GoogleService) -> BaseTool:
         await asyncio.to_thread(
             service.events().delete(calendarId=calendar_id, eventId=event_id).execute
         )
-        return f"이벤트가 삭제되었습니다: {event_id}"
+        return json.dumps(
+            {"status": "success", "event_id": event_id}, ensure_ascii=False
+        )
 
     return event_delete
