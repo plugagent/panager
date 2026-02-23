@@ -61,6 +61,7 @@ jobs:
               --service-token-id ${{ secrets.CF_ID }} \
               --service-token-secret ${{ secrets.CF_SECRET }}
             StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
           EOF
 
       - name: Deploy
