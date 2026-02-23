@@ -31,7 +31,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/panager:latest
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -49,22 +51,67 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:panager-cd
 
-      - name: Setup SSH
+      - name: Prepare Rollback Context
+        id: prep
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          PREVIOUS_SHA=$(ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "grep IMAGE_TAG ~/app/panager/.env 2>/dev/null | cut -d'=' -f2 || echo 'latest'")
+          echo "PREVIOUS_SHA=$PREVIOUS_SHA" >> $GITHUB_ENV
+          echo "Detected previous version: $PREVIOUS_SHA"
 
       - name: Deploy
+        id: deploy
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
-          scp -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/docker-compose.yml
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
+          echo "${{ secrets.ENV_FILE }}" > .env
+          echo "IMAGE_TAG=${{ github.sha }}" >> .env
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
+          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
             cd ~/app/panager
-            cat << 'INNER_EOF' > .env
-            ${{ secrets.ENV_FILE }}
-            INNER_EOF
             docker compose pull
-            docker compose up -d
+            docker compose up -d --force-recreate --remove-orphans
             docker image prune -f
           EOF
+
+      - name: Rollback on Failure
+        if: failure() && env.PREVIOUS_SHA != ''
+        run: |
+          echo "Deployment failed. Rolling back to ${{ env.PREVIOUS_SHA }}..."
+          echo "${{ secrets.ENV_FILE }}" > .env
+          echo "IMAGE_TAG=${{ env.PREVIOUS_SHA }}" >> .env
+          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
+            cd ~/app/panager
+            docker compose pull
+            docker compose up -d --force-recreate --remove-orphans
+            docker image prune -f
+          EOF
+
+      - name: Notify Success
+        if: success()
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "content": "새로운 버전으로 업데이트됐습니다. 이어서 작업을 진행할 수 있습니다."
+          }' ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+      - name: Notify Failure
+        if: failure()
+        run: |
+          ROLLBACK_STATUS="자동 롤백 시도됨"
+          if [ "${{ steps.deploy.outcome }}" == "failure" ]; then
+            echo "Deployment failed. Notification sent to dev channel."
+          fi
+          
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "❌ 배포 실패 및 자동 롤백 수행",
+              "color": 15158332,
+              "fields": [
+                {"name": "실패한 커밋", "value": "`${{ github.sha }}`", "inline": true},
+                {"name": "복구된 버전", "value": "`${{ env.PREVIOUS_SHA }}`", "inline": true},
+                {"name": "로그 확인", "value": "[GitHub Actions Run Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
+              ],
+              "footer": {"text": "Panager CI/CD System (Auto-Rollback Mode)"}
+            }]
+          }' ${{ secrets.DEV_DISCORD_WEBHOOK_URL }}
