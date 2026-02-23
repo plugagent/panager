@@ -36,14 +36,6 @@ jobs:
             docker image prune -f
           EOF
 
-      - name: Notify Success
-        if: success()
-        run: |
-          curl -X POST -H "Content-Type: application/json" \
-          -d '{
-            "content": "이전 버전(${{ github.event.inputs.target_sha }})으로 롤백됐습니다. 이어서 작업을 진행할 수 있습니다."
-          }' ${{ secrets.DISCORD_WEBHOOK_URL }}
-
       - name: Notify Failure
         if: failure()
         run: |
