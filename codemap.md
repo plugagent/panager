@@ -25,11 +25,12 @@ Panager is an agentic personal manager bot that resides in Discord DMs. It assis
 ## System Data Flow
 
 1. **User Interaction**: User sends a DM to the Discord Bot (`discord/handlers.py`).
-2. **Context Resolution**: The handler retrieves the user's LangGraph thread and state from PostgreSQL.
-3. **Agent Reasoning**: The LangGraph state machine (`agent/workflow.py`) processes the message:
+2. **System Trigger**: The Scheduler initiates agent reentry (`trigger_task`) for automated tasks (e.g., notifications).
+3. **Context Resolution**: The handler retrieves the user's LangGraph thread and state from PostgreSQL.
+4. **Agent Reasoning**: The LangGraph state machine (`agent/workflow.py`) processes the message:
    - **Memory Check**: Searches long-term memory (`services/memory.py`) for relevant past context.
    - **LLM Call**: Decides whether to reply directly or use tools.
-4. **Tool Execution**: If needed, the agent calls tools (Calendar, Tasks, Scheduler) via `services/` and `integrations/`.
-5. **Streaming Output**: The agent's response is streamed back to Discord in real-time with debouncing.
-6. **State Persistence**: The conversation state and any new memories are saved back to PostgreSQL.
+5. **Tool Execution**: If needed, the agent calls tools (Calendar, Tasks, Scheduler) via `services/` and `integrations/`.
+6. **Streaming Output**: The agent's response is streamed back to Discord in real-time with debouncing.
+7. **State Persistence**: The conversation state and any new memories are saved back to PostgreSQL.
 

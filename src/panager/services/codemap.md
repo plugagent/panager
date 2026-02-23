@@ -13,7 +13,7 @@ The services follow a singleton-like pattern (usually instantiated once at start
 ## Flow
 1. **Google Auth**: `GoogleService` generates auth URLs -> exchanges codes for tokens -> stores in DB -> provides valid `Credentials` for API calls.
 2. **Memory/Search**: Content/Query -> `MemoryService` generates vector embedding -> DB vector similarity search (`<=>`) or insert.
-3. **Scheduling**: `SchedulerService.add_schedule` -> DB persistence -> `APScheduler` job queue -> Triggered callback -> `NotificationProvider` execution -> DB status update.
+3. **Scheduling**: `SchedulerService.add_schedule` -> DB persistence -> `APScheduler` job queue -> Triggered callback -> Agent reentry (`trigger_task`) or `NotificationProvider` execution -> DB status update.
 
 ## Integration
 - **Database**: All services integrate with PostgreSQL via `asyncpg` for persistence (tokens, memories, schedules).

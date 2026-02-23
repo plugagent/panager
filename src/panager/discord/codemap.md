@@ -18,8 +18,8 @@ Discord 봇 인터페이스 및 실시간 메시지 처리를 담당하는 모�
 
 ## Flow
 
-1. **Input**: Discord 서버로부터 `on_message` 이벤트 발생 -> `handle_dm`으로 위임.
-2. **Contextualization**: DB에서 사용자 정보를 확인/등록하고, LangGraph 실행을 위한 `state` 및 `config` 구성.
+1. **Input**: Discord 서버로부터 `on_message` 이벤트 발생(`handle_dm`) 또는 스케줄러에 의한 시스템 트리거(`trigger_task`).
+2. **Contextualization**: DB에서 사용자 정보를 확인/등록하고, LangGraph 실행을 위한 `state` 및 `config` 구성. (`is_system_trigger` 플래그 활용)
 3. **Execution**: LangGraph `graph.astream`을 통해 추론 청크를 실시간으로 수신.
 4. **Output**: `_stream_agent_response`가 청크를 조합하여 Discord 메시지를 생성 및 주기적으로 업데이트.
 5. **Recovery**: 인증 필요 시 작업을 `pending_messages`에 보관 후, 인증 완료 시 `_process_auth_queue`가 감지하여 재실행.

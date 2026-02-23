@@ -58,10 +58,9 @@ uv run ruff format src/
 
 ### Production
 
-```bash
-make up    # docker compose up -d --build
-make down  # docker compose down
-```
+배포는 GitHub Actions 기반의 CD 프로세스를 통해 자동화되어 있습니다.
+- **GHCR**: `main` 브랜치 푸시 시 Docker 이미지가 빌드되어 GitHub Container Registry(`ghcr.io`)에 게시됩니다.
+- **Cloudflare SSH**: Cloudflare Tunnel/SSH를 통해 운영 서버에 보안 접속하여 `docker compose pull` 및 컨테이너 재시작을 수행합니다.
 
 ---
 
@@ -190,6 +189,18 @@ async def memory_save(content: str) -> str:
     """중요한 내용을 장기 메모리에 저장합니다."""
 ```
 
+### JSON-First Tool Response
+
+모든 도구(tool)의 응답은 구조화된 **JSON 문자열**이어야 합니다. 이는 LLM이 도구의 실행 결과(성공 여부, 데이터 등)를 명확하게 인지하도록 돕습니다.
+
+```python
+# Good
+return json.dumps({"status": "success", "event_id": "...", "summary": "회의 예약 완료"})
+
+# Bad
+return "회의가 예약되었습니다."
+```
+
 ---
 
 ## Testing Conventions
@@ -231,4 +242,6 @@ refactor: handle_dm 스트리밍 방식으로 교체
 - **Message trimming:** `trim_messages(..., token_counter="approximate")` applied in `_agent_node` before LLM invocation to bound token usage.
 - **Google auth:** `GoogleAuthRequired` exception propagates from tool → tool node → returned as message to user with OAuth URL.
 - **Streaming:** `graph.astream(..., stream_mode="messages")` with debounced Discord message edits (`STREAM_DEBOUNCE`).
+- **에이전트 재진입 (`trigger_task`):** 스케줄러에 의해 예약된 작업이 실행될 때 `trigger_task`를 통해 에이전트가 특정 컨텍스트와 함께 자동 재진입할 수 있습니다.
+- **`AgentState` 플래그:** 현재 실행이 시스템 트리거(예: 알림)에 의한 것인지 구분하기 위해 `is_system_trigger` 플래그를 `AgentState`에서 관리합니다.
 - **Migrations:** Alembic manages DB schema; always run `make migrate-test` before tests that touch the DB.

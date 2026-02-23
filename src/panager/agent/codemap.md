@@ -12,7 +12,7 @@ Core orchestration layer for the Panager agent. Defines the agentic workflow, st
 ## Flow
 1. **Entry**: Graph starts at the `agent` node via `START`.
 2. **Cognition (`_agent_node`)**: 
-   - Prepares context: Resolves timezone, formats current time, and retrieves memory context.
+   - Prepares context: Resolves timezone, formats current time with relative date information, and retrieves memory context.
    - History Management: Trims messages based on `checkpoint_max_tokens`.
    - LLM Call: Invokes the LLM with a system prompt and bound tools.
 3. **Routing (`_should_continue`)**: Checks for `tool_calls` in the LLM response.

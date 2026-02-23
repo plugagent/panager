@@ -25,7 +25,10 @@ The `src/panager/` directory coordinates the various components of the Panager s
 5. **Interface Activation:**
    - The FastAPI server (`api/`) is launched in the background to handle OAuth flows.
    - The Discord bot (`discord/`) is started to interact with users.
-6. **Interaction:** User DMs are handled by the bot, which delegates reasoning to the LangGraph agent, which in turn calls tools powered by the services.
+6. **Interaction:**
+   - User DMs are handled by the bot, which delegates reasoning to the LangGraph agent.
+   - The Scheduler triggers automated agent tasks (`trigger_task`) as needed.
+7. **Execution:** The agent calls tools powered by the services, and responses are streamed back to the user.
 
 ## Integration
 
