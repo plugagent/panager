@@ -31,7 +31,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/panager:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/panager:latest
+            ghcr.io/${{ github.repository_owner }}/panager:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -52,11 +54,38 @@ jobs:
       - name: Deploy
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
+          echo "IMAGE_TAG=${{ github.sha }}" >> .env
           ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
           scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/
           ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
             cd ~/app/panager
             docker compose pull
-            docker compose up -d
+            docker compose up -d --force-recreate --remove-orphans
             docker image prune -f
           EOF
+
+      - name: Notify Success
+        if: success()
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "content": "새로운 버전으로 업데이트됐습니다. 이어서 작업을 진행할 수 있습니다."
+          }' ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+      - name: Notify Failure
+        if: failure()
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "❌ 배포 실패 (Deployment Failed)",
+              "color": 15158332,
+              "fields": [
+                {"name": "커밋 SHA", "value": "`${{ github.sha }}`", "inline": true},
+                {"name": "브랜치", "value": "`${{ github.ref_name }}`", "inline": true},
+                {"name": "발생 단계", "value": "CD Pipeline Execution", "inline": false},
+                {"name": "로그 확인", "value": "[GitHub Actions Run Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
+              ],
+              "footer": {"text": "Panager CI/CD System"}
+            }]
+          }' ${{ secrets.DEV_DISCORD_WEBHOOK_URL }}

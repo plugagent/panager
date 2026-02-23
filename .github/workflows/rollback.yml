@@ -1,0 +1,53 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: 'Rollback target Commit SHA'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_sha }}
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:panager-cd
+
+      - name: Deploy
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+          echo "IMAGE_TAG=${{ github.event.inputs.target_sha }}" >> .env
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
+          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
+            cd ~/app/panager
+            docker compose pull
+            docker compose up -d --force-recreate --remove-orphans
+            docker image prune -f
+          EOF
+
+      - name: Notify Rollback Success
+        if: success()
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "content": "이전 버전(${{ github.event.inputs.target_sha }})으로 롤백이 완료되었습니다. 작업을 계속하실 수 있습니다."
+          }' ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+      - name: Notify Rollback Failure
+        if: failure()
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "content": "⚠️ 롤백 배포 중 오류가 발생했습니다. 개발자 확인이 필요합니다."
+          }' ${{ secrets.DEV_DISCORD_WEBHOOK_URL }}
