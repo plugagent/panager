@@ -51,14 +51,16 @@ jobs:
 
       - name: Deploy
         run: |
-          # Tailscale SSH handles authentication automatically via the connected runner
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
-          scp -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/docker-compose.yml
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
+          # 1. Create .env file locally in the GitHub runner
+          echo "${{ secrets.ENV_FILE }}" > .env
+
+          # 2. Prepare directory and transfer files
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
+          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/
+
+          # 3. Execute deployment commands
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
             cd ~/app/panager
-            cat << 'INNER_EOF' > .env
-            ${{ secrets.ENV_FILE }}
-            INNER_EOF
             docker compose pull
             docker compose up -d
             docker image prune -f
