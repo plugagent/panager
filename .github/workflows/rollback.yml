@@ -39,13 +39,17 @@ jobs:
       - name: Notify Failure
         if: failure()
         run: |
+          if [ "${{ steps.deploy.outcome }}" == "failure" ]; then
+            echo "Rollback failed. Notification sent to dev channel."
+          fi
+          
           curl -X POST -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
-              "title": "❌ 롤백 실패 (Rollback Failed)",
+              "title": "❌ 롤백 배포 실패",
               "color": 15158332,
               "fields": [
-                {"name": "대상 SHA", "value": "`${{ github.event.inputs.target_sha }}`", "inline": true},
+                {"name": "대상 커밋", "value": "`${{ github.event.inputs.target_sha }}`", "inline": true},
                 {"name": "발생 단계", "value": "Rollback Pipeline Execution", "inline": false},
                 {"name": "로그 확인", "value": "[GitHub Actions Run Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
               ],
