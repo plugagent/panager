@@ -16,11 +16,13 @@ db-down:
 # test DB 마이그레이션
 migrate-test: db
 	POSTGRES_HOST=localhost POSTGRES_PORT=5433 \
+	POSTGRES_USER=panager POSTGRES_PASSWORD=panager POSTGRES_DB=panager_test \
 	uv run alembic upgrade head
 
 # 테스트 (test DB 사용)
 test: db
 	POSTGRES_HOST=localhost POSTGRES_PORT=5433 \
+	POSTGRES_USER=panager POSTGRES_PASSWORD=panager POSTGRES_DB=panager_test \
 	uv run pytest -v
 
 # 프로덕션 빌드+실행

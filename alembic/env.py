@@ -9,7 +9,7 @@ if config.config_file_name is not None:
 
 # 환경변수에서 DSN 주입
 dsn = (
-    f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:{os.environ['POSTGRES_PASSWORD']}"
+    f"postgresql+psycopg://{os.environ['POSTGRES_USER']}:{os.environ['POSTGRES_PASSWORD']}"
     f"@{os.environ['POSTGRES_HOST']}:{os.environ.get('POSTGRES_PORT', '5432')}"
     f"/{os.environ['POSTGRES_DB']}"
 )
