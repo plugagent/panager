@@ -1,6 +1,6 @@
 services:
   migrate:
-    build: .
+    image: ghcr.io/johjun/panager:latest
     command: uv run alembic upgrade head
     env_file: .env
     depends_on:
@@ -9,7 +9,7 @@ services:
     restart: "no"
 
   panager:
-    build: .
+    image: ghcr.io/johjun/panager:latest
     env_file: .env
     ports:
       - "8000:8000"
