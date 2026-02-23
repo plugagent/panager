@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Any
 
 import discord
 from langchain_core.messages import HumanMessage
@@ -45,11 +45,18 @@ class PanagerBot(discord.Client):
         self.graph: CompiledGraph | None = None  # main.py에서 생성 후 주입됨
         self.auth_complete_queue: asyncio.Queue = asyncio.Queue()
         self._pending_messages: Dict[int, str] = {}
+        self._user_locks: Dict[int, asyncio.Lock] = {}
 
     @property
     def pending_messages(self) -> Dict[int, str]:
         """UserSessionProvider: 인증 대기 중인 메시지 맵."""
         return self._pending_messages
+
+    def _get_user_lock(self, user_id: int) -> asyncio.Lock:
+        """사용자별 락을 가져오거나 생성합니다."""
+        if user_id not in self._user_locks:
+            self._user_locks[user_id] = asyncio.Lock()
+        return self._user_locks[user_id]
 
     async def get_user_timezone(self, user_id: int) -> str:
         """UserSessionProvider: 사용자의 타임존 조회 (기본값 서울)."""
@@ -58,12 +65,39 @@ class PanagerBot(discord.Client):
 
     async def send_notification(self, user_id: int, message: str) -> None:
         """SchedulerService.NotificationProvider: 예약된 알림 발송."""
-        try:
-            user = await self.fetch_user(user_id)
-            dm = await user.create_dm()
-            await dm.send(message)
-        except Exception:
-            log.exception("알림 발송 실패 (user_id=%d)", user_id)
+        async with self._get_user_lock(user_id):
+            try:
+                user = await self.fetch_user(user_id)
+                dm = await user.create_dm()
+                await dm.send(message)
+            except Exception:
+                log.exception("알림 발송 실패 (user_id=%d)", user_id)
+
+    async def trigger_task(
+        self, user_id: int, command: str, payload: Dict[str, Any] | None = None
+    ) -> None:
+        """SchedulerService.NotificationProvider: 에이전트 작업 트리거."""
+        if self.graph is None:
+            log.error("에이전트 그래프가 주입되지 않았습니다.")
+            return
+
+        async with self._get_user_lock(user_id):
+            try:
+                user = await self.fetch_user(user_id)
+                dm = await user.create_dm()
+                config = {"configurable": {"thread_id": str(user_id)}}
+                state = {
+                    "user_id": user_id,
+                    "username": str(user),
+                    "messages": [HumanMessage(content=command)],
+                    "is_system_trigger": True,
+                }
+                log.info(
+                    "예약된 태스크 트리거 (user_id=%d, command=%s)", user_id, command
+                )
+                await _stream_agent_response(self.graph, state, config, dm)
+            except Exception:
+                log.exception("태스크 트리거 실패 (user_id=%d)", user_id)
 
     async def setup_hook(self) -> None:
         """봇 시작 시 필요한 백그라운드 태스크 설정."""
@@ -91,7 +125,8 @@ class PanagerBot(discord.Client):
                     "messages": [HumanMessage(content=pending_message)],
                     "is_system_trigger": False,
                 }
-                await _stream_agent_response(self.graph, state, config, dm)
+                async with self._get_user_lock(user_id):
+                    await _stream_agent_response(self.graph, state, config, dm)
             except Exception:
                 log.exception("인증 후 재실행 실패 (user_id=%d)", user_id)
 
@@ -112,7 +147,8 @@ class PanagerBot(discord.Client):
             )
             return
 
-        await handle_dm(message, self.graph)
+        async with self._get_user_lock(message.author.id):
+            await handle_dm(message, self.graph)
 
     async def close(self) -> None:
         """봇 종료 시 리소스 정리."""

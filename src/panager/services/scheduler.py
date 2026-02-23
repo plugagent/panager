@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from typing import Protocol, TYPE_CHECKING
+from typing import Protocol, TYPE_CHECKING, Any, Dict
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -13,9 +13,13 @@ log = logging.getLogger(__name__)
 
 
 class NotificationProvider(Protocol):
-    """알림 발송을 위한 인터페이스."""
+    """알림 및 작업을 트리거하기 위한 인터페이스."""
 
     async def send_notification(self, user_id: int, message: str) -> None: ...
+
+    async def trigger_task(
+        self, user_id: int, command: str, payload: Dict[str, Any] | None = None
+    ) -> None: ...
 
 
 class SchedulerService:
@@ -38,27 +42,36 @@ class SchedulerService:
         self._notification_provider = provider
 
     async def add_schedule(
-        self, user_id: int, message: str, trigger_at: datetime
+        self,
+        user_id: int,
+        message: str,
+        trigger_at: datetime,
+        type: str = "notification",
+        payload: Dict[str, Any] | None = None,
     ) -> UUID:
         """새로운 알림 일정을 추가하고 스케줄러에 등록합니다."""
+        import json
+
         async with self._pool.acquire() as conn:
             schedule_id = await conn.fetchval(
                 """
-                INSERT INTO schedules (user_id, message, trigger_at)
-                VALUES ($1, $2, $3)
+                INSERT INTO schedules (user_id, message, trigger_at, type, payload)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING id
                 """,
                 user_id,
                 message,
                 trigger_at,
+                type,
+                json.dumps(payload) if payload else None,
             )
 
         sid_str = str(schedule_id)
         self._scheduler.add_job(
-            self._send_scheduled_dm,
+            self._execute_schedule,
             "date",
             run_date=trigger_at,
-            args=[user_id, sid_str, message],
+            args=[user_id, sid_str, message, type, payload],
             id=sid_str,
             replace_existing=True,
         )
@@ -85,10 +98,16 @@ class SchedulerService:
                 return True
         return False
 
-    async def _send_scheduled_dm(
-        self, user_id: int, schedule_id: str, message: str, retry: int = 0
+    async def _execute_schedule(
+        self,
+        user_id: int,
+        schedule_id: str,
+        message: str,
+        type: str = "notification",
+        payload: Dict[str, Any] | None = None,
+        retry: int = 0,
     ) -> None:
-        """스케줄러에 의해 호출되어 실제 알림을 발송합니다."""
+        """스케줄러에 의해 호출되어 실제 알림 또는 작업을 실행합니다."""
         if self._notification_provider is None:
             log.error(
                 "알림 제공자가 설정되지 않아 알림을 보낼 수 없습니다. (user_id=%d)",
@@ -97,7 +116,12 @@ class SchedulerService:
             return
 
         try:
-            await self._notification_provider.send_notification(user_id, message)
+            if type == "command":
+                await self._notification_provider.trigger_task(
+                    user_id, message, payload
+                )
+            else:
+                await self._notification_provider.send_notification(user_id, message)
 
             async with self._pool.acquire() as conn:
                 await conn.execute(
@@ -105,20 +129,27 @@ class SchedulerService:
                     UUID(schedule_id),
                 )
             log.info(
-                "알림 발송 완료", extra={"user_id": user_id, "schedule_id": schedule_id}
+                "스케줄 실행 완료",
+                extra={
+                    "user_id": user_id,
+                    "schedule_id": schedule_id,
+                    "type": type,
+                },
             )
         except Exception as e:
             if retry < 3:
                 log.warning(
-                    "알림 발송 실패, 재시도 (%d/3)",
+                    "스케줄 실행 실패, 재시도 (%d/3)",
                     retry + 1,
                     extra={"user_id": user_id, "error": str(e)},
                 )
                 await asyncio.sleep(2**retry)
-                await self._send_scheduled_dm(user_id, schedule_id, message, retry + 1)
+                await self._execute_schedule(
+                    user_id, schedule_id, message, type, payload, retry + 1
+                )
             else:
                 log.error(
-                    "알림 발송 최대 재시도 초과",
+                    "스케줄 실행 최대 재시도 초과",
                     extra={
                         "user_id": user_id,
                         "schedule_id": schedule_id,
@@ -128,10 +159,12 @@ class SchedulerService:
 
     async def restore_schedules(self) -> None:
         """DB에서 아직 발송되지 않은 미래의 일정을 불러와 스케줄러에 재등록합니다."""
+        import json
+
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT id, user_id, message, trigger_at
+                SELECT id, user_id, message, trigger_at, type, payload
                 FROM schedules
                 WHERE sent = FALSE AND trigger_at > NOW()
                 """
@@ -139,11 +172,18 @@ class SchedulerService:
 
         for row in rows:
             sid_str = str(row["id"])
+            payload = json.loads(row["payload"]) if row["payload"] else None
             self._scheduler.add_job(
-                self._send_scheduled_dm,
+                self._execute_schedule,
                 "date",
                 run_date=row["trigger_at"],
-                args=[row["user_id"], sid_str, row["message"]],
+                args=[
+                    row["user_id"],
+                    sid_str,
+                    row["message"],
+                    row["type"],
+                    payload,
+                ],
                 id=sid_str,
                 replace_existing=True,
             )
