@@ -98,6 +98,7 @@ async def handle_dm(message: discord.Message, graph: Any) -> None:
         "user_id": user_id,
         "username": str(message.author),
         "messages": [HumanMessage(content=message.content)],
+        "is_system_trigger": False,
     }
 
     await _stream_agent_response(graph, state, config, message.channel)

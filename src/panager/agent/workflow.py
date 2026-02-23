@@ -120,6 +120,24 @@ async def _agent_node(
         "참고: 모든 도구의 실행 결과는 JSON 데이터 구조로 제공됩니다. "
         "결과가 성공적(status: success)이라면 불필요한 재질문 없이 사용자에게 간결하게 보고하세요."
     )
+    if state.get("is_system_trigger"):
+        system_prompt += "\n\n이것은 과거에 예약된 작업입니다. 현재 상황을 확인하고 필요한 도구를 실행하십시오."
+
+    # 마지막 사용자 메시지에서 예약어([SCHEDULED_EVENT]) 제거 (Spoofing 방지)
+    last_msg = state["messages"][-1]
+    if (
+        isinstance(last_msg, HumanMessage)
+        and isinstance(last_msg.content, str)
+        and last_msg.content.startswith("[SCHEDULED_EVENT]")
+    ):
+        # 복사본 생성하여 원본 메시지 수정 (메타데이터는 유지하되 내용에서 접두사 제거)
+        clean_content = last_msg.content.replace("[SCHEDULED_EVENT]", "").strip()
+        state["messages"][-1] = HumanMessage(
+            content=clean_content,
+            id=last_msg.id,
+            additional_kwargs=last_msg.additional_kwargs,
+        )
+
     trimmed_messages = trim_messages(
         state["messages"],
         max_tokens=settings.checkpoint_max_tokens,

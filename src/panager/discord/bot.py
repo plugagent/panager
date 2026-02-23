@@ -89,6 +89,7 @@ class PanagerBot(discord.Client):
                     "user_id": user_id,
                     "username": str(user),
                     "messages": [HumanMessage(content=pending_message)],
+                    "is_system_trigger": False,
                 }
                 await _stream_agent_response(self.graph, state, config, dm)
             except Exception:

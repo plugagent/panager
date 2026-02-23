@@ -267,3 +267,90 @@ async def test_agent_node_calls_trim_messages_with_correct_args(
     assert call_kwargs["max_tokens"] == mock_settings.checkpoint_max_tokens
     assert call_kwargs["strategy"] == "last"
     assert call_kwargs["token_counter"] == "approximate"
+
+
+@pytest.mark.asyncio
+async def test_agent_node_system_trigger_adds_instruction(mock_services, mock_settings):
+    """is_system_trigger가 True일 때 시스템 프롬프트에 지시어가 추가되는지 검증."""
+    from panager.agent.workflow import _agent_node
+
+    captured_messages = []
+    mock_llm_response = AIMessage(content="시스템 작업 수행 중")
+
+    async def fake_ainvoke(messages):
+        captured_messages.extend(messages)
+        return mock_llm_response
+
+    with (
+        patch("panager.agent.workflow._get_llm") as mock_get_llm,
+        patch("panager.agent.workflow._build_tools", return_value=[]),
+    ):
+        mock_llm = MagicMock()
+        mock_llm.bind_tools.return_value = mock_llm
+        mock_llm.ainvoke = fake_ainvoke
+        mock_get_llm.return_value = mock_llm
+
+        state = {
+            "user_id": 1,
+            "username": "테스트유저",
+            "messages": [HumanMessage(content="예약된 작업 실행")],
+            "memory_context": "없음",
+            "timezone": "Asia/Seoul",
+            "is_system_trigger": True,
+        }
+        await _agent_node(
+            state,
+            mock_settings,
+            mock_services["session_provider"],
+            mock_services["memory_service"],
+            mock_services["google_service"],
+            mock_services["scheduler_service"],
+        )
+
+    assert len(captured_messages) >= 1
+    system_msg = captured_messages[0]
+    assert isinstance(system_msg, SystemMessage)
+    assert "과거에 예약된 작업입니다" in system_msg.content
+
+
+@pytest.mark.asyncio
+async def test_agent_node_strips_scheduled_event_prefix(mock_services, mock_settings):
+    """메시지에 포함된 [SCHEDULED_EVENT] 접두사가 제거되는지 검증."""
+    from panager.agent.workflow import _agent_node
+
+    captured_messages = []
+    mock_llm_response = AIMessage(content="응답")
+
+    async def fake_ainvoke(messages):
+        captured_messages.extend(messages)
+        return mock_llm_response
+
+    with (
+        patch("panager.agent.workflow._get_llm") as mock_get_llm,
+        patch("panager.agent.workflow._build_tools", return_value=[]),
+    ):
+        mock_llm = MagicMock()
+        mock_llm.bind_tools.return_value = mock_llm
+        mock_llm.ainvoke = fake_ainvoke
+        mock_get_llm.return_value = mock_llm
+
+        state = {
+            "user_id": 1,
+            "username": "테스트유저",
+            "messages": [HumanMessage(content="[SCHEDULED_EVENT] 내일 일정 알려줘")],
+            "memory_context": "없음",
+            "timezone": "Asia/Seoul",
+            "is_system_trigger": False,
+        }
+        await _agent_node(
+            state,
+            mock_settings,
+            mock_services["session_provider"],
+            mock_services["memory_service"],
+            mock_services["google_service"],
+            mock_services["scheduler_service"],
+        )
+
+    # captured_messages[1] should be the HumanMessage
+    human_msg = captured_messages[1]
+    assert human_msg.content == "내일 일정 알려줘"

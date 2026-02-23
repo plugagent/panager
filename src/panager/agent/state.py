@@ -10,4 +10,5 @@ class AgentState(TypedDict):
     username: str
     messages: Annotated[list, add_messages]
     memory_context: str
+    is_system_trigger: NotRequired[bool]
     timezone: NotRequired[str]  # e.g. "Asia/Seoul", defaults to "Asia/Seoul" if absent
