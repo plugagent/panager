@@ -42,37 +42,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Cloudflared
-        run: |
-          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared.deb
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:panager-cd
 
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          cat >> ~/.ssh/config <<EOF
-          Host server
-            HostName ${{ secrets.SERVER_HOST }}
-            User ${{ secrets.SERVER_USER }}
-            IdentityFile ~/.ssh/id_rsa
-            ProxyCommand cloudflared access ssh --hostname %h \
-              --service-token-id ${{ secrets.CF_ID }} \
-              --service-token-secret ${{ secrets.CF_SECRET }}
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-          EOF
 
       - name: Deploy
         run: |
-          ssh server "mkdir -p ~/app/panager"
-          scp docker-compose.yml server:~/app/panager/docker-compose.yml
-          ssh server << 'EOF'
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
+          scp -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/docker-compose.yml
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
             cd ~/app/panager
             cat << 'INNER_EOF' > .env
             ${{ secrets.ENV_FILE }}
             INNER_EOF
             docker compose pull
             docker compose up -d
+            docker image prune -f
           EOF
