@@ -4,7 +4,7 @@ import asyncio
 import functools
 import logging
 import zoneinfo
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 
 from langchain_core.messages import (
@@ -103,10 +103,20 @@ async def _agent_node(
         tz = zoneinfo.ZoneInfo(tz_name)
 
     now = datetime.now(tz)
+    tomorrow = now + timedelta(days=1)
+    day_after_tomorrow = now + timedelta(days=2)
+    day_after_day_after_tomorrow = now + timedelta(days=3)
+
     weekday_ko = _WEEKDAY_KO[now.weekday()]
     utc_offset_raw = now.strftime("%z")  # e.g. "+0900"
     utc_offset = f"{utc_offset_raw[:3]}:{utc_offset_raw[3:]}"  # "+09:00"
     now_str = now.strftime(f"%Y년 %m월 %d일 ({weekday_ko}) %H:%M:%S")
+
+    relative_dates = (
+        f"- 내일: {tomorrow.strftime('%Y-%m-%d')}\n"
+        f"- 모레: {day_after_tomorrow.strftime('%Y-%m-%d')}\n"
+        f"- 글피: {day_after_day_after_tomorrow.strftime('%Y-%m-%d')}"
+    )
 
     tools = _build_tools(user_id, memory_service, google_service, scheduler_service)
     llm = _get_llm(settings).bind_tools(tools)
@@ -114,7 +124,9 @@ async def _agent_node(
         f"당신은 {state['username']}의 개인 매니저 패니저입니다. "
         "사용자의 할 일, 일정, 메모리를 관리하고 적극적으로 도와주세요.\n\n"
         f"현재 날짜/시간: {now_str} ({tz_name})\n"
-        "날짜/시간 관련 요청은 반드시 위 현재 시각 기준으로 ISO 8601 형식으로 변환하세요. "
+        f"상대 날짜 정보:\n{relative_dates}\n\n"
+        "날짜/시간 관련 요청은 반드시 위 현재 시각 및 상대 날짜 정보를 기준으로 ISO 8601 형식으로 변환하세요. "
+        "만약 사용자가 시간(HH:MM)을 명시하지 않았다면 오전 9시(09:00:00)로 가정하십시오. "
         f"예: {now.strftime('%Y')}-MM-DDTHH:MM:SS{utc_offset}\n\n"
         f"관련 메모리:\n{state.get('memory_context', '없음')}\n\n"
         "참고: 모든 도구의 실행 결과는 JSON 데이터 구조로 제공됩니다. "

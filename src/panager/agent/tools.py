@@ -59,7 +59,7 @@ class ScheduleCreateInput(BaseModel):
     command: str  # 알림 메시지 또는 실행할 명령
     trigger_at: str = Field(
         ...,
-        description="ISO 8601 형식 (반드시 초(Second) 단위와 타임존을 포함해야 함). 예: 2026-02-23T14:30:15+09:00",
+        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
     )
     type: str = "notification"  # 'notification' or 'command'
     payload: dict | None = None
@@ -120,7 +120,10 @@ class TaskListInput(BaseModel):
 
 class TaskCreateInput(BaseModel):
     title: str
-    due_at: str | None = None
+    due_at: str | None = Field(
+        None,
+        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
+    )
     notes: str | None = None
     parent_id: str | None = None
 
@@ -130,7 +133,10 @@ class TaskUpdateInput(BaseModel):
     title: str | None = None
     notes: str | None = None
     status: str | None = None  # 'needsAction' or 'completed'
-    due_at: str | None = None
+    due_at: str | None = Field(
+        None,
+        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
+    )
     starred: bool | None = None
 
 
@@ -247,8 +253,14 @@ class EventListInput(BaseModel):
 
 class EventCreateInput(BaseModel):
     title: str
-    start_at: str  # ISO 8601 (예: "2026-02-21T10:00:00+09:00")
-    end_at: str  # ISO 8601
+    start_at: str = Field(
+        ...,
+        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
+    )
+    end_at: str = Field(
+        ...,
+        description="ISO 8601 형식. 시간 미지정 시 오전 10시(10:00:00) 등을 기본값으로 사용하거나 시작 시간으로부터 적절히 설정하세요.",
+    )
     calendar_id: str = "primary"
     description: str | None = None
 
@@ -257,8 +269,14 @@ class EventUpdateInput(BaseModel):
     event_id: str
     calendar_id: str = "primary"
     title: str | None = None
-    start_at: str | None = None
-    end_at: str | None = None
+    start_at: str | None = Field(
+        None,
+        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
+    )
+    end_at: str | None = Field(
+        None,
+        description="ISO 8601 형식. 시간 미지정 시 오전 10시(10:00:00) 등을 기본값으로 사용하거나 시작 시간으로부터 적절히 설정하세요.",
+    )
     description: str | None = None
 
 
