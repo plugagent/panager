@@ -70,7 +70,7 @@ async def test_schedule_create_tool(mock_scheduler_service):
 
     tool = make_schedule_create(user_id, mock_scheduler_service)
     result_str = await tool.ainvoke(
-        {"message": "알람", "trigger_at": "2026-02-22T12:00:00"}
+        {"command": "알람", "trigger_at": "2026-02-22T12:00:00+09:00"}
     )
     result = json.loads(result_str)
 

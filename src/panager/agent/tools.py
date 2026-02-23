@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -56,8 +56,13 @@ def make_memory_search(user_id: int, memory_service: MemoryService) -> BaseTool:
 
 
 class ScheduleCreateInput(BaseModel):
-    message: str
-    trigger_at: str  # ISO 8601 형식
+    command: str  # 알림 메시지 또는 실행할 명령
+    trigger_at: str = Field(
+        ...,
+        description="ISO 8601 형식 (반드시 초(Second) 단위와 타임존을 포함해야 함). 예: 2026-02-23T14:30:15+09:00",
+    )
+    type: str = "notification"  # 'notification' or 'command'
+    payload: dict | None = None
 
 
 class ScheduleCancelInput(BaseModel):
@@ -66,15 +71,26 @@ class ScheduleCancelInput(BaseModel):
 
 def make_schedule_create(user_id: int, scheduler_service: SchedulerService) -> BaseTool:
     @tool(args_schema=ScheduleCreateInput)
-    async def schedule_create(message: str, trigger_at: str) -> str:
-        """지정한 시간에 사용자에게 DM 알림을 예약합니다."""
+    async def schedule_create(
+        command: str,
+        trigger_at: str,
+        type: str = "notification",
+        payload: dict | None = None,
+    ) -> str:
+        """지정한 시간에 사용자에게 DM 알림을 보내거나 명령(command)을 실행하도록 예약합니다.
+        단순 알림은 type='notification'을, 특정 명령 실행은 type='command'를 사용하세요.
+        command 인자에는 알림 내용 또는 실행할 명령 텍스트를 입력합니다.
+        """
         trigger_dt = datetime.fromisoformat(trigger_at)
-        schedule_id = await scheduler_service.add_schedule(user_id, message, trigger_dt)
+        schedule_id = await scheduler_service.add_schedule(
+            user_id, command, trigger_dt, type, payload
+        )
         return json.dumps(
             {
                 "status": "success",
                 "schedule_id": str(schedule_id),
                 "trigger_at": trigger_at,
+                "type": type,
             },
             ensure_ascii=False,
         )

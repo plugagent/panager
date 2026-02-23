@@ -106,7 +106,7 @@ async def _agent_node(
     weekday_ko = _WEEKDAY_KO[now.weekday()]
     utc_offset_raw = now.strftime("%z")  # e.g. "+0900"
     utc_offset = f"{utc_offset_raw[:3]}:{utc_offset_raw[3:]}"  # "+09:00"
-    now_str = now.strftime(f"%Y년 %m월 %d일 ({weekday_ko}) %H:%M")
+    now_str = now.strftime(f"%Y년 %m월 %d일 ({weekday_ko}) %H:%M:%S")
 
     tools = _build_tools(user_id, memory_service, google_service, scheduler_service)
     llm = _get_llm(settings).bind_tools(tools)
