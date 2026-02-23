@@ -1,6 +1,6 @@
 services:
   migrate:
-    build: .
+    image: ghcr.io/johjun/panager:latest
     command: uv run alembic upgrade head
     env_file: .env
     depends_on:
@@ -9,23 +9,12 @@ services:
     restart: "no"
 
   panager:
-    build: .
-    env_file: .env
-    volumes:
-      - ./logs:/app/logs
-    depends_on:
-      db:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  api:
-    build: .
-    command: uv run uvicorn panager.api.main:app --host 0.0.0.0 --port 8000
+    image: ghcr.io/johjun/panager:latest
     env_file: .env
     ports:
       - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
