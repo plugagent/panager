@@ -54,7 +54,6 @@ jobs:
       - name: Prepare Rollback Context
         id: prep
         run: |
-          # Get current IMAGE_TAG from server for rollback
           PREVIOUS_SHA=$(ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "grep IMAGE_TAG ~/app/panager/.env 2>/dev/null | cut -d'=' -f2 || echo 'latest'")
           echo "PREVIOUS_SHA=$PREVIOUS_SHA" >> $GITHUB_ENV
           echo "Detected previous version: $PREVIOUS_SHA"
@@ -100,10 +99,6 @@ jobs:
         run: |
           ROLLBACK_STATUS="자동 롤백 시도됨"
           if [ "${{ steps.deploy.outcome }}" == "failure" ]; then
-            # We determine rollback outcome based on this step's predecessor
-            # In GH Actions, if the previous step (Rollback) failed, this runs due to failure()
-            # but we can't easily check 'Rollback' status here without an ID. 
-            # Simplified: Detailed dev alert.
             echo "Deployment failed. Notification sent to dev channel."
           fi
           
