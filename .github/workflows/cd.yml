@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - develop
+      - dev
 
 jobs:
   build:
@@ -115,7 +115,7 @@ jobs:
           }' ${{ secrets.SUCCESS_WEBHOOK_URL }}
 
       - name: Notify Development Success
-        if: success() && github.ref_name == 'develop'
+        if: success() && github.ref_name == 'dev'
         run: |
           curl -X POST -H "Content-Type: application/json" \
           -d '{

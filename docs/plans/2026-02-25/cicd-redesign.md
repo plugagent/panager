@@ -35,11 +35,11 @@
 **Files:**
 - Modify: `.github/workflows/ci.yml`
 
-**Step 1: `develop` 브랜치 추가**
-- `on.pull_request.branches`에 `develop` 추가.
+**Step 1: `dev` 브랜치 추가**
+- `on.pull_request.branches`에 `dev` 추가.
 
 **Step 2: Commit**
-`ci: develop 브랜치 검증 추가`
+`ci: dev 브랜치 검증 추가`
 
 ---
 
@@ -50,7 +50,7 @@
 
 **Step 1: 환경 설정 및 배포 준비**
 - `environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}` 설정.
-- `build` 잡에서 이미지 태그 결정 (`main` -> `latest`, `develop` -> `dev`).
+- `build` 잡에서 이미지 태그 결정 (`main` -> `latest`, `dev` -> `dev`).
 
 **Step 2: `.env` 생성 로직 수정**
 - `secrets.ENV_FILE` (공통) 작성 후 `secrets.SPECIFIC_ENV` (환경별) 추가.
