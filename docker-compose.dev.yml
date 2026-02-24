@@ -1,6 +1,8 @@
 services:
   migrate:
-    build: .
+    build:
+      context: .
+      target: dev
     command: alembic upgrade head
     env_file: .env
     environment:
@@ -12,7 +14,9 @@ services:
     restart: "no"
 
   panager:
-    build: .
+    build:
+      context: .
+      target: dev
     command: uv run watchfiles "python -m panager.main" src
     env_file: .env
     environment:
