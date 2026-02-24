@@ -3,6 +3,13 @@ name: Rollback
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: 'Target Environment'
+        type: choice
+        required: true
+        options:
+          - production
+          - development
       target_sha:
         description: 'Rollback target Commit SHA'
         required: true
@@ -10,6 +17,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,35 +32,50 @@ jobs:
           tags: tag:panager-cd
 
       - name: Deploy
+        id: deploy
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
+          echo "${{ secrets.SPECIFIC_ENV }}" >> .env
           echo "IMAGE_TAG=${{ github.event.inputs.target_sha }}" >> .env
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
-          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/
+          
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
+          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
           ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
-            cd ~/app/panager
+            cd ${{ vars.DEPLOY_PATH }}
             docker compose pull
             docker compose up -d --force-recreate --remove-orphans
             docker image prune -f
           EOF
 
+      - name: Notify Success
+        if: success()
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "✅ 롤백 배포 성공",
+              "color": 3066993,
+              "fields": [
+                {"name": "환경", "value": "`${{ github.event.inputs.environment }}`", "inline": true},
+                {"name": "대상 커밋", "value": "`${{ github.event.inputs.target_sha }}`", "inline": true}
+              ],
+              "footer": {"text": "Panager CI/CD System (Manual Rollback Mode)"}
+            }]
+          }' ${{ secrets.SUCCESS_WEBHOOK_URL }}
+
       - name: Notify Failure
         if: failure()
         run: |
-          if [ "${{ steps.deploy.outcome }}" == "failure" ]; then
-            echo "Rollback failed. Notification sent to dev channel."
-          fi
-          
           curl -X POST -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
               "title": "❌ 롤백 배포 실패",
               "color": 15158332,
               "fields": [
+                {"name": "환경", "value": "`${{ github.event.inputs.environment }}`", "inline": true},
                 {"name": "대상 커밋", "value": "`${{ github.event.inputs.target_sha }}`", "inline": true},
-                {"name": "발생 단계", "value": "Rollback Pipeline Execution", "inline": false},
                 {"name": "로그 확인", "value": "[GitHub Actions Run Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
               ],
               "footer": {"text": "Panager CI/CD System (Manual Rollback Mode)"}
             }]
-          }' ${{ secrets.DEV_DISCORD_WEBHOOK_URL }}
+          }' ${{ secrets.FAILURE_WEBHOOK_URL }}
