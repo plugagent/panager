@@ -27,7 +27,22 @@ COPY alembic.ini pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# --- Stage 2: Runtime ---
+# --- Stage 2: Development ---
+FROM builder AS dev
+
+# Install dev dependencies (remove --no-dev)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen
+
+# Runtime settings for dev
+RUN adduser --disabled-password --gecos "" panager && \
+    mkdir -p /app/logs /app/.cache/huggingface && \
+    chown -R panager:panager /app
+USER panager
+# CMD is usually overridden by docker-compose.dev.yml
+CMD ["uv", "run", "watchfiles", "python -m panager.main", "src"]
+
+# --- Stage 3: Runtime ---
 FROM python:3.13-slim-bookworm
 
 WORKDIR /app
