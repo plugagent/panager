@@ -37,8 +37,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
     HF_HOME=/app/.cache/huggingface \
     PYTHONUNBUFFERED=1
 
-# 사용자 생성
-RUN adduser --disabled-password --gecos "" panager
+# 사용자 및 디렉토리 설정
+RUN adduser --disabled-password --gecos "" panager && \
+    mkdir -p /app/logs /app/.cache/huggingface && \
+    chown -R panager:panager /app
 
 # 빌드 스테이지에서 필요한 파일만 복사
 COPY --from=builder --chown=panager:panager /app/.venv /app/.venv
