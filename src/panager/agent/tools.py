@@ -4,10 +4,11 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -16,6 +17,128 @@ if TYPE_CHECKING:
     from panager.services.scheduler import SchedulerService
 
 log = logging.getLogger(__name__)
+
+
+# --- Action Enums & Base Models ---
+
+
+class MemoryAction(str, Enum):
+    SAVE = "save"
+    SEARCH = "search"
+
+
+class MemoryToolInput(BaseModel):
+    action: MemoryAction
+    content: str | None = None
+    query: str | None = None
+    limit: int = 5
+
+    @model_validator(mode="after")
+    def validate_action_fields(self) -> MemoryToolInput:
+        if self.action == MemoryAction.SAVE and not self.content:
+            raise ValueError("action='save' requires 'content'")
+        if self.action == MemoryAction.SEARCH and not self.query:
+            raise ValueError("action='search' requires 'query'")
+        return self
+
+
+class ScheduleAction(str, Enum):
+    CREATE = "create"
+    CANCEL = "cancel"
+
+
+class ScheduleToolInput(BaseModel):
+    action: ScheduleAction
+    command: str | None = None
+    trigger_at: str | None = Field(
+        None,
+        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
+    )
+    schedule_id: str | None = None
+    type: str = "notification"
+    payload: dict | None = None
+
+    @model_validator(mode="after")
+    def validate_action_fields(self) -> ScheduleToolInput:
+        if self.action == ScheduleAction.CREATE:
+            if not self.command:
+                raise ValueError("action='create' requires 'command'")
+            if not self.trigger_at:
+                raise ValueError("action='create' requires 'trigger_at'")
+        if self.action == ScheduleAction.CANCEL and not self.schedule_id:
+            raise ValueError("action='cancel' requires 'schedule_id'")
+        return self
+
+
+class TaskAction(str, Enum):
+    LIST = "list"
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+class TaskToolInput(BaseModel):
+    action: TaskAction
+    task_id: str | None = None
+    title: str | None = None
+    due_at: str | None = Field(
+        None,
+        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
+    )
+    notes: str | None = None
+    status: str | None = None
+    starred: bool | None = None
+    parent_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_action_fields(self) -> TaskToolInput:
+        if self.action == TaskAction.CREATE and not self.title:
+            raise ValueError("action='create' requires 'title'")
+        if self.action == TaskAction.UPDATE and not self.task_id:
+            raise ValueError("action='update' requires 'task_id'")
+        if self.action == TaskAction.DELETE and not self.task_id:
+            raise ValueError("action='delete' requires 'task_id'")
+        return self
+
+
+class CalendarAction(str, Enum):
+    LIST = "list"
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+class CalendarToolInput(BaseModel):
+    action: CalendarAction
+    event_id: str | None = None
+    calendar_id: str = "primary"
+    title: str | None = None
+    start_at: str | None = Field(
+        None,
+        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
+    )
+    end_at: str | None = Field(
+        None,
+        description="ISO 8601 형식. 시간 미지정 시 오전 10시(10:00:00) 등을 기본값으로 사용하거나 시작 시간으로부터 적절히 설정하세요.",
+    )
+    description: str | None = None
+    days_ahead: int = 7
+
+    @model_validator(mode="after")
+    def validate_action_fields(self) -> CalendarToolInput:
+        if self.action == CalendarAction.CREATE:
+            if not self.title:
+                raise ValueError("action='create' requires 'title'")
+            if not self.start_at:
+                raise ValueError("action='create' requires 'start_at'")
+            if not self.end_at:
+                raise ValueError("action='create' requires 'end_at'")
+        if (
+            self.action in (CalendarAction.UPDATE, CalendarAction.DELETE)
+            and not self.event_id
+        ):
+            raise ValueError(f"action='{self.action.value}' requires 'event_id'")
+        return self
 
 
 # --- Memory Tools ---
