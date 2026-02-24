@@ -30,6 +30,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # --- Stage 2: Development ---
 FROM builder AS dev
 
+# 환경 변수 설정
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1
+
 # Install dev dependencies (remove --no-dev)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen
