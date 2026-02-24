@@ -50,11 +50,8 @@ def _build_tools(
 ) -> list:
     """user_id를 클로저로 포함한 tool 인스턴스 목록을 반환합니다."""
     from panager.agent.tools import (
-        make_event_create,
-        make_event_delete,
-        make_event_list,
-        make_event_update,
         make_manage_dm_scheduler,
+        make_manage_google_calendar,
         make_manage_google_tasks,
         make_manage_user_memory,
     )
@@ -63,10 +60,7 @@ def _build_tools(
         make_manage_user_memory(user_id, memory_service),
         make_manage_dm_scheduler(user_id, scheduler_service),
         make_manage_google_tasks(user_id, google_service),
-        make_event_list(user_id, google_service),
-        make_event_create(user_id, google_service),
-        make_event_update(user_id, google_service),
-        make_event_delete(user_id, google_service),
+        make_manage_google_calendar(user_id, google_service),
     ]
 
 

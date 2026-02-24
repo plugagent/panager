@@ -2,16 +2,14 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from panager.agent.tools import (
-    make_manage_user_memory,
+    CalendarAction,
     MemoryAction,
-    make_manage_dm_scheduler,
     ScheduleAction,
-    make_manage_google_tasks,
     TaskAction,
-    make_event_list,
-    make_event_create,
-    make_event_update,
-    make_event_delete,
+    make_manage_dm_scheduler,
+    make_manage_google_calendar,
+    make_manage_google_tasks,
+    make_manage_user_memory,
 )
 
 
@@ -188,29 +186,81 @@ async def test_manage_google_tasks_delete(mock_google_service):
 
 
 @pytest.mark.asyncio
-async def test_event_list_tool(mock_google_service):
+async def test_manage_google_calendar_list(mock_google_service):
     user_id = 123
     mock_service = MagicMock()
-    mock_service.calendarList().list().execute = MagicMock(
-        return_value={"items": [{"id": "primary"}]}
-    )
-    mock_service.events().list().execute = MagicMock(
-        return_value={
-            "items": [
-                {
-                    "id": "e1",
-                    "summary": "일정 1",
-                    "start": {"dateTime": "2026-02-22T10:00:00+09:00"},
-                }
-            ]
-        }
-    )
+    mock_service.calendarList.return_value.list.return_value.execute.return_value = {
+        "items": [{"id": "primary"}]
+    }
+    mock_events = mock_service.events.return_value
+    mock_events.list.return_value.execute.return_value = {
+        "items": [
+            {
+                "id": "e1",
+                "summary": "일정 1",
+                "start": {"dateTime": "2026-02-22T10:00:00+09:00"},
+            }
+        ]
+    }
     mock_google_service.get_calendar_service = AsyncMock(return_value=mock_service)
 
-    tool = make_event_list(user_id, mock_google_service)
-    result_str = await tool.ainvoke({"days_ahead": 7})
+    tool = make_manage_google_calendar(user_id, mock_google_service)
+    result_str = await tool.ainvoke({"action": CalendarAction.LIST, "days_ahead": 7})
     result = json.loads(result_str)
 
     assert result["status"] == "success"
     assert result["events"][0]["summary"] == "일정 1"
     mock_google_service.get_calendar_service.assert_called_once_with(user_id)
+
+
+@pytest.mark.asyncio
+async def test_manage_google_calendar_create(mock_google_service):
+    user_id = 123
+    mock_service = MagicMock()
+    mock_events = mock_service.events.return_value
+    mock_events.insert.return_value.execute.return_value = {
+        "id": "e2",
+        "summary": "새 일정",
+    }
+    mock_google_service.get_calendar_service = AsyncMock(return_value=mock_service)
+
+    tool = make_manage_google_calendar(user_id, mock_google_service)
+    result_str = await tool.ainvoke(
+        {
+            "action": CalendarAction.CREATE,
+            "title": "새 일정",
+            "start_at": "2026-02-22T10:00:00+09:00",
+            "end_at": "2026-02-22T11:00:00+09:00",
+        }
+    )
+    result = json.loads(result_str)
+
+    assert result["status"] == "success"
+    assert result["event"]["summary"] == "새 일정"
+    mock_events.insert.assert_called_once_with(
+        calendarId="primary",
+        body={
+            "summary": "새 일정",
+            "start": {"dateTime": "2026-02-22T10:00:00+09:00"},
+            "end": {"dateTime": "2026-02-22T11:00:00+09:00"},
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_manage_google_calendar_delete(mock_google_service):
+    user_id = 123
+    mock_service = MagicMock()
+    mock_events = mock_service.events.return_value
+    mock_events.delete.return_value.execute.return_value = {}
+    mock_google_service.get_calendar_service = AsyncMock(return_value=mock_service)
+
+    tool = make_manage_google_calendar(user_id, mock_google_service)
+    result_str = await tool.ainvoke(
+        {"action": CalendarAction.DELETE, "event_id": "e1", "calendar_id": "primary"}
+    )
+    result = json.loads(result_str)
+
+    assert result["status"] == "success"
+    assert result["event_id"] == "e1"
+    mock_events.delete.assert_called_once_with(calendarId="primary", eventId="e1")
