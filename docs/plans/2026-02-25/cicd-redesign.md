@@ -85,13 +85,15 @@
 
 ### ⚠️ GitHub UI 설정 가이드 (작업 전 완료 필수)
 
-1.  **Environment: `production`**
-    - `SUCCESS_WEBHOOK_URL`: 사용자 채널 웹훅
-    - `FAILURE_WEBHOOK_URL`: 개발자 채널 웹훅
-    - `SPECIFIC_ENV`: `PORT=8000` 포함
-    - `vars.DEPLOY_PATH`: `~/app/panager`
-2.  **Environment: `development`**
-    - `SUCCESS_WEBHOOK_URL`: 개발자 채널 웹훅
-    - `FAILURE_WEBHOOK_URL`: 개발자 채널 웹훅
-    - `SPECIFIC_ENV`: `PORT=8080` 포함
-    - `vars.DEPLOY_PATH`: `~/app/panager-dev`
+#### 1. Repository Secrets (공통 - ENV_FILE)
+모든 환경에서 공통으로 사용하는 설정입니다.
+- `ENV_FILE`: `.env.example`의 **1. Common Settings** 섹션 내용 전체
+
+#### 2. Environments 설정 (환경별 - SPECIFIC_ENV)
+
+| 항목 | Environment: `production` | Environment: `development` |
+| :--- | :--- | :--- |
+| **Secrets: `SPECIFIC_ENV`** | `.env.example` 2번 섹션 (Port 8000용) | `.env.example` 2번 섹션 (Port 8080용) |
+| **Secrets: `SUCCESS_WEBHOOK_URL`** | 사용자 채널 웹훅 | 개발자 채널 웹훅 |
+| **Secrets: `FAILURE_WEBHOOK_URL`** | 개발자 채널 웹훅 | 개발자 채널 웹훅 |
+| **Variables: `DEPLOY_PATH`** | `~/app/panager` | `~/app/panager-dev` |
