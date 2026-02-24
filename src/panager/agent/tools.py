@@ -144,94 +144,96 @@ class CalendarToolInput(BaseModel):
 # --- Memory Tools ---
 
 
-class MemorySaveInput(BaseModel):
-    content: str
+def make_manage_user_memory(user_id: int, memory_service: MemoryService) -> BaseTool:
+    @tool(args_schema=MemoryToolInput)
+    async def manage_user_memory(
+        action: MemoryAction,
+        content: str | None = None,
+        query: str | None = None,
+        limit: int = 5,
+    ) -> str:
+        """사용자의 중요한 정보를 저장하거나 과거 메모리를 검색합니다.
 
+        - action='save': content에 내용을 입력하여 저장합니다.
+        - action='search': query에 검색어를 입력하여 관련 메모리를 찾습니다.
+        """
+        if action == MemoryAction.SAVE:
+            # MemoryToolInput validation ensures content is present for SAVE
+            await memory_service.save_memory(user_id, content)  # type: ignore
+            return json.dumps(
+                {
+                    "status": "success",
+                    "action": "save",
+                    "content_preview": content[:50],
+                },  # type: ignore
+                ensure_ascii=False,
+            )
+        elif action == MemoryAction.SEARCH:
+            # MemoryToolInput validation ensures query is present for SEARCH
+            results = await memory_service.search_memories(user_id, query, limit)  # type: ignore
+            return json.dumps(
+                {"status": "success", "action": "search", "results": results},
+                ensure_ascii=False,
+            )
+        raise ValueError(f"지원하지 않는 액션입니다: {action}")
 
-class MemorySearchInput(BaseModel):
-    query: str
-    limit: int = 5
-
-
-def make_memory_save(user_id: int, memory_service: MemoryService) -> BaseTool:
-    @tool(args_schema=MemorySaveInput)
-    async def memory_save(content: str) -> str:
-        """중요한 내용을 장기 메모리에 저장합니다."""
-        await memory_service.save_memory(user_id, content)
-        return json.dumps(
-            {"status": "success", "content_preview": content[:50]}, ensure_ascii=False
-        )
-
-    return memory_save
-
-
-def make_memory_search(user_id: int, memory_service: MemoryService) -> BaseTool:
-    @tool(args_schema=MemorySearchInput)
-    async def memory_search(query: str, limit: int = 5) -> str:
-        """사용자의 과거 대화/패턴에서 관련 내용을 검색합니다."""
-        results = await memory_service.search_memories(user_id, query, limit)
-        return json.dumps({"status": "success", "results": results}, ensure_ascii=False)
-
-    return memory_search
+    return manage_user_memory
 
 
 # --- Scheduler Tools ---
 
 
-class ScheduleCreateInput(BaseModel):
-    command: str  # 알림 메시지 또는 실행할 명령
-    trigger_at: str = Field(
-        ...,
-        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
-    )
-    type: str = "notification"  # 'notification' or 'command'
-    payload: dict | None = None
-
-
-class ScheduleCancelInput(BaseModel):
-    schedule_id: str
-
-
-def make_schedule_create(user_id: int, scheduler_service: SchedulerService) -> BaseTool:
-    @tool(args_schema=ScheduleCreateInput)
-    async def schedule_create(
-        command: str,
-        trigger_at: str,
+def make_manage_dm_scheduler(
+    user_id: int, scheduler_service: SchedulerService
+) -> BaseTool:
+    @tool(args_schema=ScheduleToolInput)
+    async def manage_dm_scheduler(
+        action: ScheduleAction,
+        command: str | None = None,
+        trigger_at: str | None = None,
+        schedule_id: str | None = None,
         type: str = "notification",
         payload: dict | None = None,
     ) -> str:
-        """지정한 시간에 사용자에게 DM 알림을 보내거나 명령(command)을 실행하도록 예약합니다.
-        단순 알림은 type='notification'을, 특정 명령 실행은 type='command'를 사용하세요.
-        command 인자에는 알림 내용 또는 실행할 명령 텍스트를 입력합니다.
+        """지정한 시간에 사용자에게 DM 알림을 보내거나 명령(command)을 실행하도록 예약 또는 취소합니다.
+
+        - action='create': command, trigger_at이 필수입니다. type은 'notification' 또는 'command'입니다.
+        - action='cancel': schedule_id가 필수입니다.
         """
-        trigger_dt = datetime.fromisoformat(trigger_at)
-        schedule_id = await scheduler_service.add_schedule(
-            user_id, command, trigger_dt, type, payload
-        )
-        return json.dumps(
-            {
-                "status": "success",
-                "schedule_id": str(schedule_id),
-                "trigger_at": trigger_at,
-                "type": type,
-            },
-            ensure_ascii=False,
-        )
+        if action == ScheduleAction.CREATE:
+            # ScheduleToolInput validation ensures command and trigger_at are present for CREATE
+            trigger_dt = datetime.fromisoformat(trigger_at)  # type: ignore
+            new_id = await scheduler_service.add_schedule(
+                user_id,
+                command,
+                trigger_dt,
+                type,
+                payload,  # type: ignore
+            )
+            return json.dumps(
+                {
+                    "status": "success",
+                    "action": "create",
+                    "schedule_id": str(new_id),
+                    "trigger_at": trigger_at,
+                    "type": type,
+                },
+                ensure_ascii=False,
+            )
+        elif action == ScheduleAction.CANCEL:
+            # ScheduleToolInput validation ensures schedule_id is present for CANCEL
+            success = await scheduler_service.cancel_schedule(user_id, schedule_id)  # type: ignore
+            return json.dumps(
+                {
+                    "status": "success" if success else "failed",
+                    "action": "cancel",
+                    "schedule_id": schedule_id,
+                },
+                ensure_ascii=False,
+            )
+        raise ValueError(f"지원하지 않는 액션입니다: {action}")
 
-    return schedule_create
-
-
-def make_schedule_cancel(user_id: int, scheduler_service: SchedulerService) -> BaseTool:
-    @tool(args_schema=ScheduleCancelInput)
-    async def schedule_cancel(schedule_id: str) -> str:
-        """예약된 알림을 취소합니다."""
-        success = await scheduler_service.cancel_schedule(user_id, schedule_id)
-        return json.dumps(
-            {"status": "success" if success else "failed", "schedule_id": schedule_id},
-            ensure_ascii=False,
-        )
-
-    return schedule_cancel
+    return manage_dm_scheduler
 
 
 # --- Google Tasks Tools ---

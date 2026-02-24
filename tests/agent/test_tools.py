@@ -2,10 +2,10 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from panager.agent.tools import (
-    make_memory_save,
-    make_memory_search,
-    make_schedule_create,
-    make_schedule_cancel,
+    make_manage_user_memory,
+    MemoryAction,
+    make_manage_dm_scheduler,
+    ScheduleAction,
     make_task_list,
     make_task_create,
     make_task_update,
@@ -33,50 +33,78 @@ def mock_scheduler_service():
 
 
 @pytest.mark.asyncio
-async def test_memory_save_tool(mock_memory_service):
+async def test_manage_user_memory_save(mock_memory_service):
     user_id = 123
     mock_memory_service.save_memory = AsyncMock()
 
-    tool = make_memory_save(user_id, mock_memory_service)
-    result_str = await tool.ainvoke({"content": "테스트 메모리"})
+    tool = make_manage_user_memory(user_id, mock_memory_service)
+    result_str = await tool.ainvoke(
+        {"action": MemoryAction.SAVE, "content": "테스트 메모리"}
+    )
     result = json.loads(result_str)
 
     assert result["status"] == "success"
+    assert result["action"] == "save"
     assert "테스트 메모리" in result["content_preview"]
     mock_memory_service.save_memory.assert_called_once_with(user_id, "테스트 메모리")
 
 
 @pytest.mark.asyncio
-async def test_memory_search_tool(mock_memory_service):
+async def test_manage_user_memory_search(mock_memory_service):
     user_id = 123
     mock_memory_service.search_memories = AsyncMock(
         return_value=["메모리 1", "메모리 2"]
     )
 
-    tool = make_memory_search(user_id, mock_memory_service)
-    result_str = await tool.ainvoke({"query": "검색어", "limit": 2})
+    tool = make_manage_user_memory(user_id, mock_memory_service)
+    result_str = await tool.ainvoke(
+        {"action": MemoryAction.SEARCH, "query": "검색어", "limit": 2}
+    )
     result = json.loads(result_str)
 
     assert result["status"] == "success"
+    assert result["action"] == "search"
     assert len(result["results"]) == 2
     assert "메모리 1" in result["results"]
     mock_memory_service.search_memories.assert_called_once_with(user_id, "검색어", 2)
 
 
 @pytest.mark.asyncio
-async def test_schedule_create_tool(mock_scheduler_service):
+async def test_manage_dm_scheduler_create(mock_scheduler_service):
     user_id = 123
     mock_scheduler_service.add_schedule = AsyncMock(return_value="job_123")
 
-    tool = make_schedule_create(user_id, mock_scheduler_service)
+    tool = make_manage_dm_scheduler(user_id, mock_scheduler_service)
     result_str = await tool.ainvoke(
-        {"command": "알람", "trigger_at": "2026-02-22T12:00:00+09:00"}
+        {
+            "action": ScheduleAction.CREATE,
+            "command": "알람",
+            "trigger_at": "2026-02-22T12:00:00+09:00",
+        }
     )
     result = json.loads(result_str)
 
     assert result["status"] == "success"
+    assert result["action"] == "create"
     assert result["schedule_id"] == "job_123"
     mock_scheduler_service.add_schedule.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_manage_dm_scheduler_cancel(mock_scheduler_service):
+    user_id = 123
+    mock_scheduler_service.cancel_schedule = AsyncMock(return_value=True)
+
+    tool = make_manage_dm_scheduler(user_id, mock_scheduler_service)
+    result_str = await tool.ainvoke(
+        {"action": ScheduleAction.CANCEL, "schedule_id": "job_123"}
+    )
+    result = json.loads(result_str)
+
+    assert result["status"] == "success"
+    assert result["action"] == "cancel"
+    assert result["schedule_id"] == "job_123"
+    mock_scheduler_service.cancel_schedule.assert_called_once_with(user_id, "job_123")
 
 
 @pytest.mark.asyncio
