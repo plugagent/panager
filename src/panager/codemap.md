@@ -4,37 +4,42 @@ This is the root package of the Panager application, containing the entry point 
 
 ## Responsibility
 
-The `src/panager/` directory coordinates the various components of the Panager system. Its primary job is to:
-- Orchestrate the lifecycle of the application (startup, service initialization, shutdown).
-- Provide a clear structure for sub-modules responsible for different domains (agent, api, discord, services, etc.).
-- Contain the `main.py` entry point which binds all layers together.
+The `src/panager/` directory serves as the **Composition Root** of the application. Its primary responsibilities include:
+- **Orchestration:** Coordinating the lifecycle of the system (startup, service initialization, and graceful shutdown).
+- **Dependency Injection:** Wiring together domain services, the agent workflow, and communication interfaces.
+- **Resource Management:** Initializing and cleaning up database connection pools and LangGraph checkpoint savers.
+- **Entrypoint:** Hosting `main.py`, which serves as the application's main entry point.
 
 ## Design
 
-- **Orchestration Layer:** `main.py` serves as the glue, initializing infrastructure (DB, Logging), services (Memory, Google, Scheduler), and interfaces (Discord Bot, FastAPI).
-- **Service-Oriented Architecture:** Business logic is encapsulated in the `services/` directory and injected into the agent workflow and the bot.
-- **Asynchronous Execution:** Built entirely on `asyncio` to handle concurrent Discord interactions, background scheduling, and API requests.
-- **Persistence:** Uses PostgreSQL for both application state (memories) and agentic state (LangGraph checkpoints).
+- **Service-Oriented Composition:** Uses a hub-and-spoke model where `main.py` (the hub) initializes various domain services and injects them into the agent and bot (the spokes).
+- **Asynchronous Orchestration:** Leverages `asyncio` to run the Discord bot and a FastAPI server (`uvicorn`) concurrently.
+- **Persistent State:** Utilizes PostgreSQL for both application data (via `asyncpg`) and agent checkpoints (via LangGraph's `AsyncPostgresSaver`).
+- **Standard Layout:** Follows the `src` layout for better package isolation and maintainability.
 
 ## Flow
 
-1. **Bootstrap:** `main.py` loads `Settings` and configures logging.
-2. **Infrastructure:** Database pools and the LangGraph `AsyncPostgresSaver` are initialized.
-3. **Services:** Domain-specific services (`MemoryService`, `GoogleService`, `SchedulerService`) are instantiated.
-4. **Agent Workflow:** The LangGraph state machine is constructed in `agent/workflow.py`, with services injected as dependencies.
+1. **Bootstrap:** `main.py` loads `Settings` and configures the global logging system.
+2. **Infrastructure Initialization:**
+   - Initializes the `asyncpg` pool for service-level DB access.
+   - Sets up `psycopg` connection for the LangGraph `AsyncPostgresSaver` and runs checkpoint cleanup based on TTL.
+3. **Service Layer Setup:** Instantiates `MemoryService`, `GoogleService`, and `SchedulerService`.
+4. **Agent Compilation:** Calls `build_graph` to construct the LangGraph state machine, injecting the initialized services and the bot.
 5. **Interface Activation:**
-   - The FastAPI server (`api/`) is launched in the background to handle OAuth flows.
-   - The Discord bot (`discord/`) is started to interact with users.
-6. **Interaction:**
-   - User DMs are handled by the bot, which delegates reasoning to the LangGraph agent.
-   - The Scheduler triggers automated agent tasks (`trigger_task`) as needed.
-7. **Execution:** The agent calls tools powered by the services, and responses are streamed back to the user.
+   - Launches a FastAPI instance (`api/`) in a background task to handle OAuth callbacks.
+   - Restores existing schedules from the database.
+   - Starts the `PanagerBot` (`discord/`) to begin listening for user interactions.
+6. **Graceful Shutdown:** Intercepts termination signals to close DB pools and cancel background tasks cleanly.
 
-## Integration
+## Package Structure & Integration
 
-- **Entry Point:** `main.py` - The application entry point.
-- **Agent:** `agent/` - LangGraph-based reasoning and tool definitions.
-- **Interface:** `discord/` and `api/` - User-facing communication channels.
-- **Business Logic:** `services/` - Core functionality (Google, Memory, Scheduling).
-- **Infrastructure:** `db/` and `core/` - Persistence, configuration, and logging.
-- **External:** `integrations/` - Low-level clients for external APIs (Google).
+- **`main.py`**: The application entry point and composition root.
+- **`agent/`**: Defines the LangGraph workflow, state schemas, and agent-specific tools.
+- **`services/`**: Encapsulates business logic for long-term memory, Google Workspace integration, and task scheduling.
+- **`discord/`**: Implements the Discord bot interface, message handling, and response streaming.
+- **`api/`**: Provides a FastAPI application for web-based flows (e.g., Google OAuth).
+- **`db/`**: Manages database connection lifecycle and schema migrations.
+- **`core/`**: Contains cross-cutting concerns like configuration, logging, and custom exceptions.
+- **`integrations/`**: Low-level client implementations for external APIs.
+- **`scheduler/`**: Placeholder for background task execution logic (currently managed via `services/scheduler.py`).
+
