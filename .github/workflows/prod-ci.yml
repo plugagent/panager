@@ -1,8 +1,6 @@
-name: CI
+name: Prod CI (Verify)
 
 on:
-  push:
-    branches: [ dev ]
   pull_request:
     branches: [ main ]
 
@@ -17,10 +15,8 @@ jobs:
         with:
           python-version: "3.13"
           enable-cache: true
-
       - name: Install dependencies
         run: uv sync --frozen
-
       - name: Run Ruff
         run: |
           uv run ruff check src/
@@ -50,10 +46,8 @@ jobs:
         with:
           python-version: "3.13"
           enable-cache: true
-
       - name: Install dependencies
         run: uv sync --frozen
-
       - name: Run migrations
         env:
           POSTGRES_HOST: localhost
@@ -62,7 +56,6 @@ jobs:
           POSTGRES_PASSWORD: panager
           POSTGRES_DB: panager_test
         run: uv run alembic upgrade head
-        
       - name: Run tests
         env:
           POSTGRES_HOST: localhost
@@ -72,7 +65,7 @@ jobs:
           POSTGRES_DB: panager_test
         run: uv run pytest -v
 
-  build:
+  build-check:
     name: Verify Docker Build
     runs-on: ubuntu-latest
     steps:
