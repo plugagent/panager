@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
 
 jobs:
   build:
@@ -11,10 +12,21 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image_tag: ${{ steps.set-tag.outputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set Image Tag
+        id: set-tag
+        run: |
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=dev" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -36,7 +48,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ steps.set-tag.outputs.tag }}
             ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -44,6 +56,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,7 +71,7 @@ jobs:
       - name: Prepare Rollback Context
         id: prep
         run: |
-          PREVIOUS_SHA=$(ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "grep IMAGE_TAG ~/app/panager/.env 2>/dev/null | cut -d'=' -f2 || echo 'latest'")
+          PREVIOUS_SHA=$(ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "grep IMAGE_TAG ${{ vars.DEPLOY_PATH }}/.env 2>/dev/null | cut -d'=' -f2 || echo 'latest'")
           echo "PREVIOUS_SHA=$PREVIOUS_SHA" >> $GITHUB_ENV
           echo "Detected previous version: $PREVIOUS_SHA"
 
@@ -66,11 +79,13 @@ jobs:
         id: deploy
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
+          echo "${{ secrets.SPECIFIC_ENV }}" >> .env
           echo "IMAGE_TAG=${{ github.sha }}" >> .env
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ~/app/panager"
-          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/
+          
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
+          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
           ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
-            cd ~/app/panager
+            cd ${{ vars.DEPLOY_PATH }}
             docker compose pull
             docker compose up -d --force-recreate --remove-orphans
             docker image prune -f
@@ -81,41 +96,56 @@ jobs:
         run: |
           echo "Deployment failed. Rolling back to ${{ env.PREVIOUS_SHA }}..."
           echo "${{ secrets.ENV_FILE }}" > .env
+          echo "${{ secrets.SPECIFIC_ENV }}" >> .env
           echo "IMAGE_TAG=${{ env.PREVIOUS_SHA }}" >> .env
-          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:~/app/panager/
+          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
           ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
-            cd ~/app/panager
+            cd ${{ vars.DEPLOY_PATH }}
             docker compose pull
             docker compose up -d --force-recreate --remove-orphans
             docker image prune -f
           EOF
 
-      - name: Notify Success
-        if: success()
+      - name: Notify Production Success
+        if: success() && github.ref_name == 'main'
         run: |
           curl -X POST -H "Content-Type: application/json" \
           -d '{
             "content": "새로운 버전으로 업데이트됐습니다. 이어서 작업을 진행할 수 있습니다."
-          }' ${{ secrets.DISCORD_WEBHOOK_URL }}
+          }' ${{ secrets.SUCCESS_WEBHOOK_URL }}
+
+      - name: Notify Development Success
+        if: success() && github.ref_name == 'develop'
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "✅ 개발 환경 배포 성공",
+              "color": 3066993,
+              "fields": [
+                {"name": "브랜치", "value": "`${{ github.ref_name }}`", "inline": true},
+                {"name": "커밋 SHA", "value": "`${{ github.sha }}`", "inline": true},
+                {"name": "배포 경로", "value": "`${{ vars.DEPLOY_PATH }}`", "inline": false},
+                {"name": "로그 확인", "value": "[GitHub Actions Run Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
+              ],
+              "footer": {"text": "Panager CI/CD System (Dev Mode)"}
+            }]
+          }' ${{ secrets.SUCCESS_WEBHOOK_URL }}
 
       - name: Notify Failure
         if: failure()
         run: |
-          ROLLBACK_STATUS="자동 롤백 시도됨"
-          if [ "${{ steps.deploy.outcome }}" == "failure" ]; then
-            echo "Deployment failed. Notification sent to dev channel."
-          fi
-          
           curl -X POST -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
               "title": "❌ 배포 실패 및 자동 롤백 수행",
               "color": 15158332,
               "fields": [
+                {"name": "환경", "value": "`${{ github.ref_name == 'main' && 'Production' || 'Development' }}`", "inline": true},
                 {"name": "실패한 커밋", "value": "`${{ github.sha }}`", "inline": true},
                 {"name": "복구된 버전", "value": "`${{ env.PREVIOUS_SHA }}`", "inline": true},
                 {"name": "로그 확인", "value": "[GitHub Actions Run Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
               ],
               "footer": {"text": "Panager CI/CD System (Auto-Rollback Mode)"}
             }]
-          }' ${{ secrets.DEV_DISCORD_WEBHOOK_URL }}
+          }' ${{ secrets.FAILURE_WEBHOOK_URL }}
