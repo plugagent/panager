@@ -6,10 +6,8 @@ from panager.agent.tools import (
     MemoryAction,
     make_manage_dm_scheduler,
     ScheduleAction,
-    make_task_list,
-    make_task_create,
-    make_task_update,
-    make_task_delete,
+    make_manage_google_tasks,
+    TaskAction,
     make_event_list,
     make_event_create,
     make_event_update,
@@ -108,23 +106,85 @@ async def test_manage_dm_scheduler_cancel(mock_scheduler_service):
 
 
 @pytest.mark.asyncio
-async def test_task_list_tool(mock_google_service):
+async def test_manage_google_tasks_list(mock_google_service):
     user_id = 123
     mock_service = MagicMock()
-    mock_service.tasks().list().execute = MagicMock(
-        return_value={
-            "items": [{"id": "t1", "title": "할일 1", "status": "needsAction"}]
-        }
-    )
+    mock_tasks = mock_service.tasks.return_value
+    mock_tasks.list.return_value.execute.return_value = {
+        "items": [{"id": "t1", "title": "할일 1", "status": "needsAction"}]
+    }
     mock_google_service.get_tasks_service = AsyncMock(return_value=mock_service)
 
-    tool = make_task_list(user_id, mock_google_service)
-    result_str = await tool.ainvoke({})
+    tool = make_manage_google_tasks(user_id, mock_google_service)
+    result_str = await tool.ainvoke({"action": TaskAction.LIST})
     result = json.loads(result_str)
 
     assert result["status"] == "success"
     assert result["tasks"][0]["title"] == "할일 1"
-    mock_google_service.get_tasks_service.assert_called_once_with(user_id)
+    mock_tasks.list.assert_called_once_with(tasklist="@default", pageToken=None)
+
+
+@pytest.mark.asyncio
+async def test_manage_google_tasks_create(mock_google_service):
+    user_id = 123
+    mock_service = MagicMock()
+    mock_tasks = mock_service.tasks.return_value
+    mock_tasks.insert.return_value.execute.return_value = {
+        "id": "t2",
+        "title": "새 할일",
+    }
+    mock_google_service.get_tasks_service = AsyncMock(return_value=mock_service)
+
+    tool = make_manage_google_tasks(user_id, mock_google_service)
+    result_str = await tool.ainvoke({"action": TaskAction.CREATE, "title": "새 할일"})
+    result = json.loads(result_str)
+
+    assert result["status"] == "success"
+    assert result["task"]["title"] == "새 할일"
+    mock_tasks.insert.assert_called_once_with(
+        tasklist="@default", body={"title": "새 할일"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_manage_google_tasks_update_status(mock_google_service):
+    user_id = 123
+    mock_service = MagicMock()
+    mock_tasks = mock_service.tasks.return_value
+    mock_tasks.patch.return_value.execute.return_value = {
+        "id": "t1",
+        "status": "completed",
+    }
+    mock_google_service.get_tasks_service = AsyncMock(return_value=mock_service)
+
+    tool = make_manage_google_tasks(user_id, mock_google_service)
+    result_str = await tool.ainvoke(
+        {"action": TaskAction.UPDATE_STATUS, "task_id": "t1", "status": "completed"}
+    )
+    result = json.loads(result_str)
+
+    assert result["status"] == "success"
+    assert result["task"]["status"] == "completed"
+    mock_tasks.patch.assert_called_once_with(
+        tasklist="@default", task="t1", body={"status": "completed"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_manage_google_tasks_delete(mock_google_service):
+    user_id = 123
+    mock_service = MagicMock()
+    mock_tasks = mock_service.tasks.return_value
+    mock_tasks.delete.return_value.execute.return_value = {}
+    mock_google_service.get_tasks_service = AsyncMock(return_value=mock_service)
+
+    tool = make_manage_google_tasks(user_id, mock_google_service)
+    result_str = await tool.ainvoke({"action": TaskAction.DELETE, "task_id": "t1"})
+    result = json.loads(result_str)
+
+    assert result["status"] == "success"
+    assert result["task_id"] == "t1"
+    mock_tasks.delete.assert_called_once_with(tasklist="@default", task="t1")
 
 
 @pytest.mark.asyncio

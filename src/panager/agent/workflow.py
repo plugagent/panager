@@ -55,20 +55,14 @@ def _build_tools(
         make_event_list,
         make_event_update,
         make_manage_dm_scheduler,
+        make_manage_google_tasks,
         make_manage_user_memory,
-        make_task_delete,
-        make_task_create,
-        make_task_list,
-        make_task_update,
     )
 
     return [
         make_manage_user_memory(user_id, memory_service),
         make_manage_dm_scheduler(user_id, scheduler_service),
-        make_task_create(user_id, google_service),
-        make_task_list(user_id, google_service),
-        make_task_update(user_id, google_service),
-        make_task_delete(user_id, google_service),
+        make_manage_google_tasks(user_id, google_service),
         make_event_list(user_id, google_service),
         make_event_create(user_id, google_service),
         make_event_update(user_id, google_service),
