@@ -86,6 +86,7 @@ def make_notion_tools(user_id: int, notion_service: NotionService) -> list[BaseT
                 "status": "success",
                 "page_id": response["id"],
                 "url": response.get("url"),
+                "pending_reflections": [],
             },
             ensure_ascii=False,
         )

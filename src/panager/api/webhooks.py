@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
-from typing import Any
+
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
@@ -103,7 +103,9 @@ async def github_webhook(
         )
         # trigger_task(user_id, command, payload)
         # 현재 bot.py의 trigger_task는 payload를 직접 사용하지 않으므로 command에 context를 포함하여 전달
-        await bot.trigger_task(user_id, command, payload=context)
+        await bot.trigger_task(
+            user_id, command, payload={"pending_reflections": [context]}
+        )
 
     log.info(
         "GitHub Webhook 처리 완료: %s (ref: %s, commits: %d)",

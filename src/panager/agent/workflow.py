@@ -182,11 +182,14 @@ def build_graph(
             "main_context": dict(state),
         }
         res = await notion_worker.ainvoke(worker_state)
-        return {
+        update = {
             "messages": res["messages"],
             "task_summary": res.get("task_summary", ""),
             "auth_request_url": res.get("auth_request_url"),
         }
+        if "pending_reflections" in res:
+            update["pending_reflections"] = res["pending_reflections"]
+        return update
 
     graph.add_node("GoogleWorker", call_google_worker)
     graph.add_node("GithubWorker", call_github_worker)

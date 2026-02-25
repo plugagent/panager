@@ -87,7 +87,10 @@ async def supervisor_node(
     pending_reflections = state.get("pending_reflections")
     if pending_reflections:
         reflections_str = "\n".join(
-            [f"- {r.get('repo')}: {r.get('commit_msg')}" for r in pending_reflections]
+            [
+                f"- {r.get('repository')} (ref: {r.get('ref')}, {len(r.get('commits', []))} commits)"
+                for r in pending_reflections
+            ]
         )
         system_prompt += f"\n\nPending Reflections (GitHub Push Events):\n{reflections_str}\n(사용자에게 이 푸시 이벤트들에 대해 회고할지 물어보고, 답변을 받으면 NotionWorker를 통해 기록하세요.)"
 

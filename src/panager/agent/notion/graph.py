@@ -51,6 +51,7 @@ def build_notion_worker(
 
         tool_messages = []
         auth_url = None
+        pending_reflections = None
 
         for tool_call in last_message.tool_calls:
             try:
@@ -58,6 +59,14 @@ def build_notion_worker(
                 tool_messages.append(
                     ToolMessage(content=str(result), tool_call_id=tool_call["id"])
                 )
+
+                # 결과 파싱하여 pending_reflections이 있으면 추출
+                try:
+                    res_obj = json.loads(str(result))
+                    if isinstance(res_obj, dict) and "pending_reflections" in res_obj:
+                        pending_reflections = res_obj["pending_reflections"]
+                except Exception:
+                    pass
             except NotionAuthRequired:
                 if user_id:
                     auth_url = notion_service.get_auth_url(user_id)
@@ -76,6 +85,8 @@ def build_notion_worker(
         res: dict = {"messages": tool_messages}
         if auth_url:
             res["auth_request_url"] = auth_url
+        if pending_reflections is not None:
+            res["pending_reflections"] = pending_reflections
 
         return res
 

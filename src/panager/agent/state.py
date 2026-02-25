@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import operator
 from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.messages import AnyMessage
@@ -34,7 +33,7 @@ class AgentState(TypedDict):
     next_worker: NotRequired[str]
     auth_request_url: NotRequired[str | None]
     task_summary: NotRequired[str]
-    pending_reflections: NotRequired[Annotated[list[dict], operator.add]]
+    pending_reflections: NotRequired[list[dict]]
 
 
 class WorkerState(TypedDict):
@@ -42,3 +41,4 @@ class WorkerState(TypedDict):
     task: str
     main_context: dict
     auth_request_url: NotRequired[str | None]
+    pending_reflections: NotRequired[list[dict]]
