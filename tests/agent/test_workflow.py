@@ -70,28 +70,29 @@ async def test_graph_processes_message(mock_services, mock_settings):
 async def test_agent_node_system_prompt_contains_date_and_timezone(
     mock_services, mock_settings
 ):
-    """_agent_node가 system prompt에 현재 연도와 timezone을 포함하는지 검증."""
+    """supervisor_node가 system prompt에 현재 연도와 timezone을 포함하는지 검증."""
     from datetime import datetime
     import zoneinfo
-    from langchain_core.messages import AIMessage, SystemMessage
+    from langchain_core.messages import SystemMessage
+    from panager.agent.workflow import Route
 
     captured_messages = []
-    mock_llm_response = AIMessage(content="테스트 응답")
+    mock_route_response = Route(next_worker="FINISH")
 
     async def fake_ainvoke(messages):
         captured_messages.extend(messages)
-        return mock_llm_response
+        return mock_route_response
 
     with (
         patch("panager.agent.workflow._get_llm") as mock_get_llm,
-        patch("panager.agent.workflow._build_tools", return_value=[]),
     ):
         mock_llm = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm
-        mock_llm.ainvoke = fake_ainvoke
+        mock_llm_structured = MagicMock()
+        mock_llm.with_structured_output.return_value = mock_llm_structured
+        mock_llm_structured.ainvoke = fake_ainvoke
         mock_get_llm.return_value = mock_llm
 
-        from panager.agent.workflow import _agent_node
+        from panager.agent.workflow import supervisor_node
 
         state = {
             "user_id": 1,
@@ -100,13 +101,10 @@ async def test_agent_node_system_prompt_contains_date_and_timezone(
             "memory_context": "없음",
             "timezone": "Asia/Seoul",
         }
-        await _agent_node(
+        await supervisor_node(
             state,
             mock_settings,
             mock_services["session_provider"],
-            mock_services["memory_service"],
-            mock_services["google_service"],
-            mock_services["scheduler_service"],
         )
 
     assert len(captured_messages) >= 1
@@ -126,27 +124,26 @@ async def test_agent_node_invalid_timezone_falls_back_to_seoul(
     mock_services, mock_settings
 ):
     """유효하지 않은 timezone이 주어졌을 때 Asia/Seoul로 폴백하는지 검증."""
-    from datetime import datetime
-    import zoneinfo
-    from langchain_core.messages import AIMessage, SystemMessage
+    from panager.agent.workflow import Route
+    from langchain_core.messages import SystemMessage
 
     captured_messages = []
-    mock_llm_response = AIMessage(content="폴백 테스트")
+    mock_route_response = Route(next_worker="FINISH")
 
     async def fake_ainvoke(messages):
         captured_messages.extend(messages)
-        return mock_llm_response
+        return mock_route_response
 
     with (
         patch("panager.agent.workflow._get_llm") as mock_get_llm,
-        patch("panager.agent.workflow._build_tools", return_value=[]),
     ):
         mock_llm = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm
-        mock_llm.ainvoke = fake_ainvoke
+        mock_llm_structured = MagicMock()
+        mock_llm.with_structured_output.return_value = mock_llm_structured
+        mock_llm_structured.ainvoke = fake_ainvoke
         mock_get_llm.return_value = mock_llm
 
-        from panager.agent.workflow import _agent_node
+        from panager.agent.workflow import supervisor_node
 
         state = {
             "user_id": 1,
@@ -156,13 +153,10 @@ async def test_agent_node_invalid_timezone_falls_back_to_seoul(
             "timezone": "Invalid/Timezone_XYZ",
         }
         # Should not raise ZoneInfoNotFoundError
-        await _agent_node(
+        await supervisor_node(
             state,
             mock_settings,
             mock_services["session_provider"],
-            mock_services["memory_service"],
-            mock_services["google_service"],
-            mock_services["scheduler_service"],
         )
 
     assert len(captured_messages) >= 1
@@ -230,14 +224,14 @@ def test_trim_messages_keeps_all_when_under_limit():
 async def test_agent_node_calls_trim_messages_with_correct_args(
     mock_services, mock_settings
 ):
-    """_agent_node가 trim_messages를 올바른 인자로 호출하는지 검증."""
-    from panager.agent.workflow import _agent_node
-    from panager.core.config import Settings
+    """supervisor_node가 trim_messages를 올바른 인자로 호출하는지 검증."""
+    from panager.agent.workflow import supervisor_node, Route
 
-    mock_response = AIMessage(content="안녕하세요!")
+    mock_route_response = Route(next_worker="FINISH")
     mock_llm = MagicMock()
-    mock_llm.bind_tools.return_value = mock_llm
-    mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+    mock_llm_structured = MagicMock()
+    mock_llm.with_structured_output.return_value = mock_llm_structured
+    mock_llm_structured.ainvoke = AsyncMock(return_value=mock_route_response)
 
     state = {
         "user_id": 123,
@@ -249,17 +243,13 @@ async def test_agent_node_calls_trim_messages_with_correct_args(
 
     with (
         patch("panager.agent.workflow._get_llm", return_value=mock_llm),
-        patch("panager.agent.workflow._build_tools", return_value=[]),
         patch("panager.agent.workflow.trim_messages") as mock_trim,
     ):
         mock_trim.return_value = state["messages"]
-        await _agent_node(
+        await supervisor_node(
             state,
             mock_settings,
             mock_services["session_provider"],
-            mock_services["memory_service"],
-            mock_services["google_service"],
-            mock_services["scheduler_service"],
         )
 
     mock_trim.assert_called_once()
@@ -272,22 +262,23 @@ async def test_agent_node_calls_trim_messages_with_correct_args(
 @pytest.mark.asyncio
 async def test_agent_node_system_trigger_adds_instruction(mock_services, mock_settings):
     """is_system_trigger가 True일 때 시스템 프롬프트에 지시어가 추가되는지 검증."""
-    from panager.agent.workflow import _agent_node
+    from panager.agent.workflow import supervisor_node, Route
+    from langchain_core.messages import SystemMessage
 
     captured_messages = []
-    mock_llm_response = AIMessage(content="시스템 작업 수행 중")
+    mock_route_response = Route(next_worker="FINISH")
 
     async def fake_ainvoke(messages):
         captured_messages.extend(messages)
-        return mock_llm_response
+        return mock_route_response
 
     with (
         patch("panager.agent.workflow._get_llm") as mock_get_llm,
-        patch("panager.agent.workflow._build_tools", return_value=[]),
     ):
         mock_llm = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm
-        mock_llm.ainvoke = fake_ainvoke
+        mock_llm_structured = MagicMock()
+        mock_llm.with_structured_output.return_value = mock_llm_structured
+        mock_llm_structured.ainvoke = fake_ainvoke
         mock_get_llm.return_value = mock_llm
 
         state = {
@@ -298,13 +289,10 @@ async def test_agent_node_system_trigger_adds_instruction(mock_services, mock_se
             "timezone": "Asia/Seoul",
             "is_system_trigger": True,
         }
-        await _agent_node(
+        await supervisor_node(
             state,
             mock_settings,
             mock_services["session_provider"],
-            mock_services["memory_service"],
-            mock_services["google_service"],
-            mock_services["scheduler_service"],
         )
 
     assert len(captured_messages) >= 1
@@ -316,24 +304,17 @@ async def test_agent_node_system_trigger_adds_instruction(mock_services, mock_se
 @pytest.mark.asyncio
 async def test_agent_node_strips_scheduled_event_prefix(mock_services, mock_settings):
     """메시지에 포함된 [SCHEDULED_EVENT] 접두사가 제거되는지 검증."""
-    from panager.agent.workflow import _agent_node
+    from panager.agent.workflow import supervisor_node, Route
 
-    captured_messages = []
-    mock_llm_response = AIMessage(content="응답")
-
-    async def fake_ainvoke(messages):
-        captured_messages.extend(messages)
-        return mock_llm_response
+    mock_route_response = Route(next_worker="FINISH")
+    mock_llm = MagicMock()
+    mock_llm_structured = MagicMock()
+    mock_llm.with_structured_output.return_value = mock_llm_structured
+    mock_llm_structured.ainvoke = AsyncMock(return_value=mock_route_response)
 
     with (
-        patch("panager.agent.workflow._get_llm") as mock_get_llm,
-        patch("panager.agent.workflow._build_tools", return_value=[]),
+        patch("panager.agent.workflow._get_llm", return_value=mock_llm),
     ):
-        mock_llm = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm
-        mock_llm.ainvoke = fake_ainvoke
-        mock_get_llm.return_value = mock_llm
-
         state = {
             "user_id": 1,
             "username": "테스트유저",
@@ -342,15 +323,11 @@ async def test_agent_node_strips_scheduled_event_prefix(mock_services, mock_sett
             "timezone": "Asia/Seoul",
             "is_system_trigger": False,
         }
-        await _agent_node(
+        await supervisor_node(
             state,
             mock_settings,
             mock_services["session_provider"],
-            mock_services["memory_service"],
-            mock_services["google_service"],
-            mock_services["scheduler_service"],
         )
 
-    # captured_messages[1] should be the HumanMessage
-    human_msg = captured_messages[1]
-    assert human_msg.content == "내일 일정 알려줘"
+    # state["messages"][-1] should be cleaned
+    assert state["messages"][-1].content == "내일 일정 알려줘"
