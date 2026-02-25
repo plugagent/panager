@@ -15,6 +15,35 @@ Guide for agentic coding agents working in this repository.
 
 ---
 
+## Agent Workflow
+
+에이전트가 이 코드베이스에서 작업할 때는 코드 품질과 안정성을 보장하기 위해 아래의 표준 작업 절차를 엄격히 준수해야 합니다.
+
+### 1. 디자인 우선 원칙 (Design-First Principle)
+- **계획 선행**: 기능 추가, 리팩토링, 구조 변경 등 코드 수정 전에는 반드시 `docs/plans/` 디렉토리에 마크다운 형식의 설계/구현 계획 문서(예: `docs/plans/feature-name.md`)를 작성합니다.
+- **승인 후 실행**: 계획을 작성한 후에는 반드시 사용자(User) 또는 아키텍처 담당 에이전트의 리뷰와 승인을 거쳐야만 실제 코딩 작업으로 진입할 수 있습니다.
+
+### 2. 표준 작업 사이클 (Standard Work Cycle)
+복잡한 문제를 해결하기 위해 에이전트는 다음 5단계를 거쳐 작업합니다:
+1. **Understand (이해)**: 요구사항과 시스템의 현재 상태, 연관된 기존 컨텍스트를 분석합니다.
+2. **DELEGATE (위임)**: 작업 성격에 따라 최적화된 에이전트 롤을 활용하고 역할을 나눕니다.
+   - `@oracle`: 아키텍처 설계, 전략 수립, 코드 리뷰 및 고난도 디버깅 조언 (Read-Only)
+   - `@explorer`: 코드베이스 구조 파악 및 관련 심볼 탐색 전문
+   - `@fixer`: 실제 코드 구현, 버그 수정, 테스트 작성 및 리팩토링 실행
+3. **Plan (계획)**: `docs/plans/`에 구체적이고 실행 가능한 단계별 계획을 문서화합니다.
+4. **Execute (실행)**: 수립된 계획에 따라 전용 브랜치에서 코드를 수정합니다.
+5. **Verify (검증)**: `make test` 및 `uv run ruff check`를 통해 사이드 이펙트가 없음을 증명합니다.
+
+### 3. 클린 깃 정책 (Clean Git Policy)
+- **직접 수정 금지**: `dev` 또는 `main` 브랜치에서 직접 코드를 수정하거나 커밋하는 것을 엄격히 금지합니다.
+- **브랜치/워크트리 분리**: 모든 작업(단순 문서 수정 포함)은 작업 목적을 나타내는 명확한 이름의 전용 기능 브랜치에서 수행해야 합니다.
+- **안전한 병합 (Finishing a branch)**: 작업 종료 시 반드시 `finishing-a-development-branch` 스킬(또는 동등한 절차)을 준수합니다.
+  - 최신 기준 브랜치(Base branch)로부터 Rebase하여 충돌을 해결합니다.
+  - 병합 전 전체 테스트 스위트가 통과하는지 확인합니다.
+  - 커밋 메시지 컨벤션에 맞춰 불필요한 커밋을 정리한 뒤 병합/PR을 진행합니다.
+
+---
+
 ## Commands
 
 ### Development
@@ -239,9 +268,10 @@ refactor: handle_dm 스트리밍 방식으로 교체
 ## Key Architectural Notes
 
 - **LangGraph checkpointer:** `AsyncPostgresSaver` with `thread_id = str(user_id)` — conversations persist across restarts.
-- **Message trimming:** `trim_messages(..., token_counter="approximate")` applied in `_agent_node` before LLM invocation to bound token usage.
-- **Google auth:** `GoogleAuthRequired` exception propagates from tool → tool node → returned as message to user with OAuth URL.
-- **Streaming:** `graph.astream(..., stream_mode="messages")` with debounced Discord message edits (`STREAM_DEBOUNCE`).
+- **Supervisor Pattern:** 메인 그래프는 `supervisor_node`를 통해 요청을 분석하고 전문가 워커(`GoogleWorker`, `MemoryWorker`, `SchedulerWorker`)에게 작업을 위임합니다.
+- **Message trimming:** `trim_messages(..., token_counter="approximate")`가 `supervisor_node` 및 워커 노드에서 실행되어 토큰 사용량을 제한합니다.
+- **Google auth (Interrupt):** Google 인증 필요 시 `interrupt()`를 사용하여 그래프 실행을 중단하고, 사용자가 인증을 완료하면 `Command(resume="auth_success")`를 통해 중단된 지점부터 자동 재개합니다.
+- **Streaming:** `graph.astream(..., stream_mode="messages")`와 `STREAM_DEBOUNCE`를 사용하여 디스코드 메시지를 실시간으로 업데이트합니다.
 - **에이전트 재진입 (`trigger_task`):** 스케줄러에 의해 예약된 작업이 실행될 때 `trigger_task`를 통해 에이전트가 특정 컨텍스트와 함께 자동 재진입할 수 있습니다.
 - **`AgentState` 플래그:** 현재 실행이 시스템 트리거(예: 알림)에 의한 것인지 구분하기 위해 `is_system_trigger` 플래그를 `AgentState`에서 관리합니다.
 - **Migrations:** Alembic manages DB schema; always run `make migrate-test` before tests that touch the DB.
