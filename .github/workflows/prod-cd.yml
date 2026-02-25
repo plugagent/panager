@@ -58,10 +58,14 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:panager-cd
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan ${{ secrets.SERVER_TS_IP }} >> ~/.ssh/known_hosts
       - name: Prepare Rollback Context
         id: prep
         run: |
-          PREVIOUS_SHA=$(ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "grep IMAGE_TAG ${{ vars.DEPLOY_PATH }}/.env 2>/dev/null | cut -d'=' -f2 || echo 'latest'")
+          PREVIOUS_SHA=$(ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "grep IMAGE_TAG ${{ vars.DEPLOY_PATH }}/.env 2>/dev/null | cut -d'=' -f2 || echo 'latest'")
           echo "PREVIOUS_SHA=$PREVIOUS_SHA" >> $GITHUB_ENV
       - name: Deploy
         id: deploy
@@ -70,13 +74,22 @@ jobs:
           echo "${{ secrets.SPECIFIC_ENV }}" >> .env
           echo "IMAGE_TAG=${{ github.sha }}" >> .env
           echo "MODEL_IMAGE_TAG=${{ vars.MODEL_IMAGE_TAG || 'latest' }}" >> .env
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
-          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
+          ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
+          scp docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
+          ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
             cd ${{ vars.DEPLOY_PATH }}
             docker compose pull
-            docker compose up -d --force-recreate --remove-orphans
+            docker compose up -d --wait --force-recreate --remove-orphans
             docker image prune -f
+          EOF
+      - name: Rollback on Failure
+        if: failure() && steps.deploy.outcome == 'failure'
+        run: |
+          ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << EOF
+            cd ${{ vars.DEPLOY_PATH }}
+            sed -i "s/IMAGE_TAG=.*/IMAGE_TAG=${{ env.PREVIOUS_SHA }}/" .env
+            docker compose pull
+            docker compose up -d --wait --force-recreate --remove-orphans
           EOF
       - name: Notify Success
         if: success()

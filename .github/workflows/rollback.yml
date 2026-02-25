@@ -31,19 +31,25 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:panager-cd
 
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan ${{ secrets.SERVER_TS_IP }} >> ~/.ssh/known_hosts
+
       - name: Deploy
         id: deploy
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
           echo "${{ secrets.SPECIFIC_ENV }}" >> .env
           echo "IMAGE_TAG=${{ github.event.inputs.target_sha }}" >> .env
+          echo "MODEL_IMAGE_TAG=${{ vars.MODEL_IMAGE_TAG || 'latest' }}" >> .env
           
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
-          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
+          ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
+          scp docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
+          ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
             cd ${{ vars.DEPLOY_PATH }}
             docker compose pull
-            docker compose up -d --force-recreate --remove-orphans
+            docker compose up -d --wait --force-recreate --remove-orphans
             docker image prune -f
           EOF
 
