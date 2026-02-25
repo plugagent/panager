@@ -231,10 +231,18 @@ def build_google_worker(
     """Google Calendar 및 Tasks 관리를 위한 전담 워커 서브 그래프를 생성합니다."""
 
     async def _worker_agent_node(state: WorkerState) -> dict:
+        main_ctx = state.get("main_context", {})
+        now_str = main_ctx.get("current_time", "알 수 없음")
+        tz_name = main_ctx.get("timezone", "UTC")
+        relative_dates = main_ctx.get("relative_dates", "")
+
         system_prompt = (
             "당신은 Google Calendar와 Google Tasks 관리를 담당하는 전문가입니다. "
             "사용자의 요청에 따라 일정을 조회, 생성, 삭제하거나 할 일을 관리하세요. "
-            "작업이 완료되면 수행한 내용을 간결하게 요약하여 보고하십시오."
+            "작업이 완료되면 수행한 내용을 간결하게 요약하여 보고하십시오.\n\n"
+            f"현재 날짜/시간: {now_str} ({tz_name})\n"
+            f"상대 날짜 정보:\n{relative_dates}\n\n"
+            "날짜/시간 관련 요청은 반드시 위 현재 시각 및 상대 날짜 정보를 기준으로 ISO 8601 형식으로 변환하세요."
         )
         messages = [SystemMessage(content=system_prompt)] + state["messages"]
         response = await llm.ainvoke(messages)
@@ -250,10 +258,23 @@ def build_google_worker(
         auth_url = None
 
         for tool_call in last_message.tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            tool_id = tool_call["id"]
+
+            if tool_name not in tool_map:
+                result = json.dumps(
+                    {"status": "error", "message": f"알 수 없는 툴: {tool_name}"},
+                    ensure_ascii=False,
+                )
+                tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
+                continue
+
             try:
-                result = await tool_map[tool_call["name"]].ainvoke(tool_call["args"])
+                result = await tool_map[tool_name].ainvoke(tool_args)
+                # 도구는 이미 JSON 문자열을 반환해야 함 (AGENTS.md)
                 tool_messages.append(
-                    ToolMessage(content=str(result), tool_call_id=tool_call["id"])
+                    ToolMessage(content=str(result), tool_call_id=tool_id)
                 )
             except GoogleAuthRequired:
                 auth_url = google_service.get_auth_url(state["user_id"])
@@ -263,10 +284,16 @@ def build_google_worker(
                             {"status": "error", "message": "Google 인증이 필요합니다."},
                             ensure_ascii=False,
                         ),
-                        tool_call_id=tool_call["id"],
+                        tool_call_id=tool_id,
                     )
                 )
                 break  # 인증이 필요한 경우 추가 도구 실행 중단
+            except Exception as exc:
+                result = json.dumps(
+                    {"status": "error", "message": f"오류 발생: {exc}"},
+                    ensure_ascii=False,
+                )
+                tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
 
         res: dict = {"messages": tool_messages}
         if auth_url:
