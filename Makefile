@@ -17,7 +17,7 @@ dev-logs:
 
 # 모델 이미지 빌드 (로컬)
 build-model:
-	docker compose build model-init
+	docker compose -f docker-compose.dev.yml build model-init
 
 # test DB 시작 (healthy 대기)
 db:
@@ -41,7 +41,7 @@ test: db
 
 # 프로덕션 빌드+실행
 up:
-	MODEL_IMAGE_TAG=$(MODEL_IMAGE_TAG) docker compose up -d --build
+	MODEL_IMAGE_TAG=$(MODEL_IMAGE_TAG) IMAGE_TAG=$(IMAGE_TAG) docker compose up -d
 
 # 프로덕션 정리
 down:
