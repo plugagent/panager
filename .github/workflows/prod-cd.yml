@@ -69,6 +69,7 @@ jobs:
           echo "${{ secrets.ENV_FILE }}" > .env
           echo "${{ secrets.SPECIFIC_ENV }}" >> .env
           echo "IMAGE_TAG=${{ github.sha }}" >> .env
+          echo "MODEL_IMAGE_TAG=${{ vars.MODEL_IMAGE_TAG || 'latest' }}" >> .env
           ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
           scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
           ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
