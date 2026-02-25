@@ -127,7 +127,21 @@ async def supervisor_node(
             additional_kwargs=last_msg.additional_kwargs,
         )
 
-    messages = [SystemMessage(content=system_prompt)] + state["messages"]
+    # 메시지 트리밍
+    trimmed_messages = trim_messages(
+        state["messages"],
+        max_tokens=settings.checkpoint_max_tokens,
+        strategy="last",
+        token_counter="approximate",
+        include_system=False,
+        allow_partial=False,
+        start_on="human",
+    )
+
+    if state.get("is_system_trigger"):
+        system_prompt += "\n\nNote: This is an automated trigger (e.g., scheduled notification). Please handle it accordingly. (과거에 예약된 작업입니다. 사용자가 보낸 것처럼 자연스럽게 처리하세요.)"
+
+    messages = [SystemMessage(content=system_prompt)] + trimmed_messages
 
     # 워커로부터의 요약 정보가 있으면 추가 컨텍스트 제공
     task_summary = state.get("task_summary")
@@ -190,7 +204,17 @@ def build_google_worker(
             "사용자의 요청에 따라 일정을 조회, 생성, 삭제하거나 할 일을 관리하세요. "
             "작업이 완료되면 수행한 내용을 간결하게 요약하여 보고하십시오."
         )
-        messages = [SystemMessage(content=system_prompt)] + state["messages"]
+        # 메시지 트리밍
+        trimmed_messages = trim_messages(
+            state["messages"],
+            max_tokens=4000,  # 워커별 적절한 한도 (설정에서 가져올 수도 있음)
+            strategy="last",
+            token_counter="approximate",
+            include_system=False,
+            allow_partial=False,
+            start_on="human",
+        )
+        messages = [SystemMessage(content=system_prompt)] + trimmed_messages
         response = await llm.ainvoke(messages)
 
         res: dict = {"messages": [response]}
