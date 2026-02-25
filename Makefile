@@ -1,4 +1,4 @@
-.PHONY: dev db db-down test migrate-test up down dev-up dev-down dev-logs
+.PHONY: dev db db-down test migrate-test up down dev-up dev-down dev-logs build-model
 
 # 로컬 개발 (Native): test DB 올리고 봇 핫리로드 실행
 dev: db
@@ -7,13 +7,17 @@ dev: db
 
 # 로컬 개발 (Docker): 도커 컨테이너에서 봇 실행 (핫리로드 지원)
 dev-up:
-	docker compose -f docker-compose.dev.yml up -d --build
+	MODEL_IMAGE_TAG=$(MODEL_IMAGE_TAG) docker compose -f docker-compose.dev.yml up -d --build
 
 dev-down:
 	docker compose -f docker-compose.dev.yml down
 
 dev-logs:
 	docker compose -f docker-compose.dev.yml logs -f
+
+# 모델 이미지 빌드 (로컬)
+build-model:
+	docker compose build model-init
 
 # test DB 시작 (healthy 대기)
 db:
@@ -37,7 +41,7 @@ test: db
 
 # 프로덕션 빌드+실행
 up:
-	docker compose up -d --build
+	MODEL_IMAGE_TAG=$(MODEL_IMAGE_TAG) docker compose up -d --build
 
 # 프로덕션 정리
 down:

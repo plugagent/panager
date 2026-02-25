@@ -13,6 +13,7 @@ Guide for agentic coding agents working in the **panager** repository.
 make dev           # Start test DB + hot-reload bot
 make db            # Start test PostgreSQL (localhost:5433)
 make migrate-test  # Apply alembic migrations to test DB
+make build-model   # Build model-init image locally
 ```
 ### Testing & Linting
 ```bash
@@ -87,6 +88,8 @@ return json.dumps({"status": "success", "summary": "Event created", "event_id": 
 - **Interrupt/Resume:** Graphs use `interrupt` for external requirements (e.g., OAuth authentication).
 - **Proactive Triggers:** GitHub webhooks and internal schedulers trigger the agent with `is_system_trigger=True` to initiate proactive conversations.
 - **Message Trimming:** `trim_messages` is applied at the Supervisor level to bound token usage.
+- **Model Storage:** HuggingFace 모델은 `hf_cache` 볼륨에 저장되어 컨테이너 재시작 후에도 유지됩니다.
+- **Model Build:** 모델 초기화 이미지(`model-init`)는 `model.yml` GitHub Action 또는 `make build-model`을 통해 수동으로 빌드할 수 있습니다. 한 번 빌드된 이미지는 로컬 캐시 또는 레지스트리에서 재사용됩니다.
 
 ## Testing Conventions
 - Use `@pytest.mark.asyncio` for async tests.
