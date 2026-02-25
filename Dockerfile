@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen
 
 # Runtime settings for dev
-RUN adduser --disabled-password --gecos "" panager && \
+RUN adduser --uid 1000 --disabled-password --gecos "" panager && \
     mkdir -p /app/logs /app/.cache/huggingface && \
     chown -R panager:panager /app
 USER panager
@@ -58,7 +58,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
 # 사용자 및 디렉토리 설정
-RUN adduser --disabled-password --gecos "" panager && \
+RUN adduser --uid 1000 --disabled-password --gecos "" panager && \
     mkdir -p /app/logs /app/.cache/huggingface && \
     chown -R panager:panager /app
 

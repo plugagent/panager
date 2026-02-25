@@ -19,6 +19,9 @@ WORKDIR /model
 # 다운로드된 모델 복사
 COPY --from=downloader /model-cache /model
 
+# 모델 버전 파일 생성 (멱등성 보장용)
+RUN date +%s > /model/.model_version
+
 # 실행 시 볼륨으로 복사하는 명령
 # /app/.cache/huggingface 경로가 볼륨으로 마운트될 것을 가정
-CMD ["sh", "-ec", "mkdir -p /app/.cache/huggingface && if [ -z \"$(ls -A /app/.cache/huggingface 2>/dev/null)\" ]; then echo 'Copying model to volume...'; cp -a /model/. /app/.cache/huggingface/ && chown -R 1000:1000 /app/.cache/huggingface; else echo 'Model already in volume.'; fi && echo 'Done.'"]
+CMD ["sh", "-ec", "mkdir -p /app/.cache/huggingface && if ! cmp -s /model/.model_version /app/.cache/huggingface/.model_version; then echo 'Model version mismatch or missing. Updating volume...'; cp -a /model/. /app/.cache/huggingface/ && chown -R 1000:1000 /app/.cache/huggingface; else echo 'Model version is up to date.'; fi && echo 'Done.'"]
