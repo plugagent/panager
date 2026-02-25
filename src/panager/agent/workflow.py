@@ -1,28 +1,19 @@
 from __future__ import annotations
 
-import asyncio
 import functools
-import json
 import logging
-import zoneinfo
-from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
-from langchain_core.messages import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolMessage,
-    trim_messages,
-)
-from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
-from pydantic import BaseModel, Field
 
+from panager.agent.google.graph import build_google_worker
+from panager.agent.memory.graph import build_memory_worker
+from panager.agent.scheduler.graph import build_scheduler_worker
 from panager.agent.state import AgentState, WorkerState
+from panager.agent.supervisor import supervisor_node
+from panager.agent.utils import get_llm
 from panager.core.config import Settings
-from panager.core.exceptions import GoogleAuthRequired
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -36,15 +27,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _get_llm(settings: Settings) -> ChatOpenAI:
-    return ChatOpenAI(
-        model=settings.llm_model,
-        base_url=settings.llm_base_url,
-        api_key=settings.llm_api_key,
-        streaming=True,
-    )
-
-
 def _build_tools(
     user_id: int,
     memory_service: MemoryService,
@@ -52,12 +34,12 @@ def _build_tools(
     scheduler_service: SchedulerService,
 ) -> list:
     """user_id를 클로저로 포함한 tool 인스턴스 목록을 반환합니다."""
-    from panager.agent.tools import (
-        make_manage_dm_scheduler,
+    from panager.agent.google.tools import (
         make_manage_google_calendar,
         make_manage_google_tasks,
-        make_manage_user_memory,
     )
+    from panager.agent.memory.tools import make_manage_user_memory
+    from panager.agent.scheduler.tools import make_manage_dm_scheduler
 
     return [
         make_manage_user_memory(user_id, memory_service),
@@ -65,98 +47,6 @@ def _build_tools(
         make_manage_google_tasks(user_id, google_service),
         make_manage_google_calendar(user_id, google_service),
     ]
-
-
-_WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
-
-
-class Route(BaseModel):
-    """The next worker to call or FINISH."""
-
-    next_worker: Literal[
-        "GoogleWorker", "MemoryWorker", "SchedulerWorker", "FINISH"
-    ] = Field(
-        description="The next worker to handle the task, or 'FINISH' if the task is complete."
-    )
-
-
-async def supervisor_node(
-    state: AgentState,
-    settings: Settings,
-    session_provider: UserSessionProvider,
-) -> dict:
-    """작업을 분배할 적절한 워커를 결정하거나 종료를 결정합니다."""
-    user_id = state["user_id"]
-    tz_name = state.get("timezone")
-    if not tz_name:
-        tz_name = await session_provider.get_user_timezone(user_id)
-
-    try:
-        tz = zoneinfo.ZoneInfo(tz_name)
-    except Exception:
-        tz_name = "Asia/Seoul"
-        tz = zoneinfo.ZoneInfo(tz_name)
-
-    now = datetime.now(tz)
-    weekday_ko = _WEEKDAY_KO[now.weekday()]
-    now_str = now.strftime(f"%Y년 %m월 %d일 ({weekday_ko}) %H:%M:%S")
-
-    llm = _get_llm(settings).with_structured_output(Route)
-
-    system_prompt = (
-        "You are a supervisor managing a personal assistant bot. Decide which specialist worker to call next or if the task is finished.\n"
-        f"Current Time: {now_str} ({tz_name})\n\n"
-        "Specialists:\n"
-        "- GoogleWorker: Handles Google Calendar and Tasks (listing, creating, deleting).\n"
-        "- MemoryWorker: Searches or saves user's personal information and context.\n"
-        "- SchedulerWorker: Manages DM notifications and scheduled tasks.\n\n"
-        "If the user's request is handled or no further action is needed, return 'FINISH'."
-    )
-
-    # 메시지 정리 (예약어 제거)
-    last_msg = state["messages"][-1]
-    if (
-        isinstance(last_msg, HumanMessage)
-        and isinstance(last_msg.content, str)
-        and last_msg.content.startswith("[SCHEDULED_EVENT]")
-    ):
-        clean_content = last_msg.content.replace("[SCHEDULED_EVENT]", "").strip()
-        state["messages"][-1] = HumanMessage(
-            content=clean_content,
-            id=last_msg.id,
-            additional_kwargs=last_msg.additional_kwargs,
-        )
-
-    # 메시지 트리밍
-    trimmed_messages = trim_messages(
-        state["messages"],
-        max_tokens=settings.checkpoint_max_tokens,
-        strategy="last",
-        token_counter="approximate",
-        include_system=False,
-        allow_partial=False,
-        start_on="human",
-    )
-
-    if state.get("is_system_trigger"):
-        system_prompt += "\n\nNote: This is an automated trigger (e.g., scheduled notification). Please handle it accordingly. (과거에 예약된 작업입니다. 사용자가 보낸 것처럼 자연스럽게 처리하세요.)"
-
-    messages = [SystemMessage(content=system_prompt)] + trimmed_messages
-
-    # 워커로부터의 요약 정보가 있으면 추가 컨텍스트 제공
-    task_summary = state.get("task_summary")
-    if task_summary:
-        messages.append(
-            SystemMessage(content=f"Recent worker activity summary: {task_summary}")
-        )
-
-    response = await llm.ainvoke(messages)
-    assert isinstance(response, Route)
-
-    res: dict = {"next_worker": response.next_worker}
-    if "timezone" not in state:
-        res["timezone"] = tz_name
-    return res
 
 
 def auth_interrupt_node(state: AgentState):
@@ -189,229 +79,6 @@ def auth_interrupt_node(state: AgentState):
     return {}
 
 
-def build_google_worker(
-    llm: ChatOpenAI,
-    google_service: GoogleService,
-    memory_service: MemoryService,
-    scheduler_service: SchedulerService,
-) -> CompiledGraph:
-    """Google Calendar 및 Tasks 관리를 위한 전담 워커 서브 그래프를 생성합니다."""
-
-    async def _worker_agent_node(state: WorkerState) -> dict:
-        system_prompt = (
-            "당신은 Google Calendar와 Google Tasks 관리를 담당하는 전문가입니다. "
-            f"현재 작업: {state['task']}\n"
-            "사용자의 요청에 따라 일정을 조회, 생성, 삭제하거나 할 일을 관리하세요. "
-            "작업이 완료되면 수행한 내용을 간결하게 요약하여 보고하십시오."
-        )
-        # 메시지 트리밍
-        trimmed_messages = trim_messages(
-            state["messages"],
-            max_tokens=4000,  # 워커별 적절한 한도 (설정에서 가져올 수도 있음)
-            strategy="last",
-            token_counter="approximate",
-            include_system=False,
-            allow_partial=False,
-            start_on="human",
-        )
-        messages = [SystemMessage(content=system_prompt)] + trimmed_messages
-        response = await llm.ainvoke(messages)
-
-        res: dict = {"messages": [response]}
-        # 도구 호출이 없으면 최종 응답으로 간주하고 요약을 상태에 저장
-        if not response.tool_calls:
-            res["task_summary"] = response.content
-
-        return res
-
-    async def _worker_tool_node(state: WorkerState) -> dict:
-        user_id = state["main_context"]["user_id"]
-        tools = _build_tools(user_id, memory_service, google_service, scheduler_service)
-        tool_map = {t.name: t for t in tools}
-        last_message = state["messages"][-1]
-        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return {"messages": []}
-
-        tool_messages = []
-        auth_url = None
-
-        for tool_call in last_message.tool_calls:
-            try:
-                result = await tool_map[tool_call["name"]].ainvoke(tool_call["args"])
-                tool_messages.append(
-                    ToolMessage(content=str(result), tool_call_id=tool_call["id"])
-                )
-            except GoogleAuthRequired:
-                # main_context에서 user_id를 추출하여 인증 URL 생성
-                if user_id:
-                    auth_url = google_service.get_auth_url(user_id)
-
-                tool_messages.append(
-                    ToolMessage(
-                        content=json.dumps(
-                            {"status": "error", "message": "Google 인증이 필요합니다."},
-                            ensure_ascii=False,
-                        ),
-                        tool_call_id=tool_call["id"],
-                    )
-                )
-                break  # 인증이 필요한 경우 추가 도구 실행 중단
-
-        res: dict = {"messages": tool_messages}
-        if auth_url:
-            res["auth_request_url"] = auth_url
-
-        return res
-
-    def _worker_should_continue(state: WorkerState) -> Literal["tools", "__end__"]:
-        if state.get("auth_request_url"):
-            return END
-        last_message = state["messages"][-1]
-        if isinstance(last_message, AIMessage) and last_message.tool_calls:
-            return "tools"
-        return END
-
-    workflow = StateGraph(WorkerState)
-    workflow.add_node("agent", _worker_agent_node)
-    workflow.add_node("tools", _worker_tool_node)
-
-    workflow.add_edge(START, "agent")
-    workflow.add_conditional_edges("agent", _worker_should_continue)
-    workflow.add_edge("tools", "agent")
-
-    return workflow.compile()
-
-
-def build_memory_worker(llm: ChatOpenAI) -> CompiledGraph:
-    """사용자 메모리 관리를 위한 워커 (Placeholder)"""
-
-    async def _node(state: WorkerState) -> dict:
-        content = "MemoryWorker logic placeholder. I can search or save info."
-        return {
-            "messages": [AIMessage(content=content)],
-            "task_summary": "Memory task processed.",
-        }
-
-    workflow = StateGraph(WorkerState)
-    workflow.add_node("agent", _node)
-    workflow.add_edge(START, "agent")
-    workflow.add_edge("agent", END)
-    return workflow.compile()
-
-
-def build_scheduler_worker(llm: ChatOpenAI) -> CompiledGraph:
-    """DM 알림 및 스케줄 관리를 위한 워커 (Placeholder)"""
-
-    async def _node(state: WorkerState) -> dict:
-        content = "SchedulerWorker logic placeholder. I can manage notifications."
-        return {
-            "messages": [AIMessage(content=content)],
-            "task_summary": "Scheduler task processed.",
-        }
-
-    workflow = StateGraph(WorkerState)
-    workflow.add_node("agent", _node)
-    workflow.add_edge(START, "agent")
-    workflow.add_edge("agent", END)
-    return workflow.compile()
-
-
-def build_google_worker(
-    llm: ChatOpenAI,
-    tools: list,
-    google_service: GoogleService,
-) -> CompiledGraph:
-    """Google Calendar 및 Tasks 관리를 위한 전담 워커 서브 그래프를 생성합니다."""
-
-    async def _worker_agent_node(state: WorkerState) -> dict:
-        main_ctx = state.get("main_context", {})
-        now_str = main_ctx.get("current_time", "알 수 없음")
-        tz_name = main_ctx.get("timezone", "UTC")
-        relative_dates = main_ctx.get("relative_dates", "")
-
-        system_prompt = (
-            "당신은 Google Calendar와 Google Tasks 관리를 담당하는 전문가입니다. "
-            "사용자의 요청에 따라 일정을 조회, 생성, 삭제하거나 할 일을 관리하세요. "
-            "작업이 완료되면 수행한 내용을 간결하게 요약하여 보고하십시오.\n\n"
-            f"현재 날짜/시간: {now_str} ({tz_name})\n"
-            f"상대 날짜 정보:\n{relative_dates}\n\n"
-            "날짜/시간 관련 요청은 반드시 위 현재 시각 및 상대 날짜 정보를 기준으로 ISO 8601 형식으로 변환하세요."
-        )
-        messages = [SystemMessage(content=system_prompt)] + state["messages"]
-        response = await llm.ainvoke(messages)
-        return {"messages": [response]}
-
-    async def _worker_tool_node(state: WorkerState) -> dict:
-        tool_map = {t.name: t for t in tools}
-        last_message = state["messages"][-1]
-        if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-            return {"messages": []}
-
-        tool_messages = []
-        auth_url = None
-
-        for tool_call in last_message.tool_calls:
-            tool_name = tool_call["name"]
-            tool_args = tool_call["args"]
-            tool_id = tool_call["id"]
-
-            if tool_name not in tool_map:
-                result = json.dumps(
-                    {"status": "error", "message": f"알 수 없는 툴: {tool_name}"},
-                    ensure_ascii=False,
-                )
-                tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
-                continue
-
-            try:
-                result = await tool_map[tool_name].ainvoke(tool_args)
-                # 도구는 이미 JSON 문자열을 반환해야 함 (AGENTS.md)
-                tool_messages.append(
-                    ToolMessage(content=str(result), tool_call_id=tool_id)
-                )
-            except GoogleAuthRequired:
-                auth_url = google_service.get_auth_url(state["user_id"])
-                tool_messages.append(
-                    ToolMessage(
-                        content=json.dumps(
-                            {"status": "error", "message": "Google 인증이 필요합니다."},
-                            ensure_ascii=False,
-                        ),
-                        tool_call_id=tool_id,
-                    )
-                )
-                break  # 인증이 필요한 경우 추가 도구 실행 중단
-            except Exception as exc:
-                result = json.dumps(
-                    {"status": "error", "message": f"오류 발생: {exc}"},
-                    ensure_ascii=False,
-                )
-                tool_messages.append(ToolMessage(content=result, tool_call_id=tool_id))
-
-        res: dict = {"messages": tool_messages}
-        if auth_url:
-            res["auth_request_url"] = auth_url
-        return res
-
-    def _should_continue(state: WorkerState) -> Literal["tools", "__end__"]:
-        if state.get("auth_request_url"):
-            return END
-        last_message = state["messages"][-1]
-        if isinstance(last_message, AIMessage) and last_message.tool_calls:
-            return "tools"
-        return END
-
-    workflow = StateGraph(WorkerState)
-    workflow.add_node("agent", _worker_agent_node)
-    workflow.add_node("tools", _worker_tool_node)
-
-    workflow.add_edge(START, "agent")
-    workflow.add_conditional_edges("agent", _should_continue)
-    workflow.add_edge("tools", "agent")
-
-    return workflow.compile()
-
-
 def build_graph(
     checkpointer: BaseCheckpointSaver,
     session_provider: UserSessionProvider,
@@ -420,7 +87,7 @@ def build_graph(
     scheduler_service: SchedulerService,
 ) -> CompiledGraph:
     settings = Settings()
-    llm = _get_llm(settings)
+    llm = get_llm(settings)
 
     # 1. 서브 워커 빌드
     google_worker = build_google_worker(

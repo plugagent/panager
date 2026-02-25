@@ -1,9 +1,20 @@
 from __future__ import annotations
 
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
+from pydantic import BaseModel, Field
+
+
+class Route(BaseModel):
+    """The next worker to call or FINISH."""
+
+    next_worker: Literal[
+        "GoogleWorker", "MemoryWorker", "SchedulerWorker", "FINISH"
+    ] = Field(
+        description="The next worker to handle the task, or 'FINISH' if the task is complete."
+    )
 
 
 class AgentState(TypedDict):

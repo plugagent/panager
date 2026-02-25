@@ -12,62 +12,10 @@ from pydantic import BaseModel, Field, model_validator
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
+
     from panager.services.google import GoogleService
-    from panager.services.memory import MemoryService
-    from panager.services.scheduler import SchedulerService
 
 log = logging.getLogger(__name__)
-
-
-# --- Action Enums & Base Models ---
-
-
-class MemoryAction(str, Enum):
-    SAVE = "save"
-    SEARCH = "search"
-
-
-class MemoryToolInput(BaseModel):
-    action: MemoryAction
-    content: str | None = None
-    query: str | None = None
-    limit: int = 5
-
-    @model_validator(mode="after")
-    def validate_action_fields(self) -> MemoryToolInput:
-        if self.action == MemoryAction.SAVE and not self.content:
-            raise ValueError("action='save' requires 'content'")
-        if self.action == MemoryAction.SEARCH and not self.query:
-            raise ValueError("action='search' requires 'query'")
-        return self
-
-
-class ScheduleAction(str, Enum):
-    CREATE = "create"
-    CANCEL = "cancel"
-
-
-class ScheduleToolInput(BaseModel):
-    action: ScheduleAction
-    command: str | None = None
-    trigger_at: str | None = Field(
-        None,
-        description="ISO 8601 형식. 시간 미지정 시 오전 9시(09:00:00)를 기본값으로 사용하세요. 예: 2026-02-23T09:00:00+09:00",
-    )
-    schedule_id: str | None = None
-    type: str = "notification"
-    payload: dict | None = None
-
-    @model_validator(mode="after")
-    def validate_action_fields(self) -> ScheduleToolInput:
-        if self.action == ScheduleAction.CREATE:
-            if not self.command:
-                raise ValueError("action='create' requires 'command'")
-            if not self.trigger_at:
-                raise ValueError("action='create' requires 'trigger_at'")
-        if self.action == ScheduleAction.CANCEL and not self.schedule_id:
-            raise ValueError("action='cancel' requires 'schedule_id'")
-        return self
 
 
 class TaskAction(str, Enum):
@@ -129,104 +77,6 @@ class CalendarToolInput(BaseModel):
         return self
 
 
-# --- Memory Tools ---
-
-
-def make_manage_user_memory(user_id: int, memory_service: MemoryService) -> BaseTool:
-    @tool(args_schema=MemoryToolInput)
-    async def manage_user_memory(
-        action: MemoryAction,
-        content: str | None = None,
-        query: str | None = None,
-        limit: int = 5,
-    ) -> str:
-        """사용자의 중요한 정보를 저장하거나 과거 메모리를 검색합니다.
-
-        - action='save': content에 내용을 입력하여 저장합니다.
-        - action='search': query에 검색어를 입력하여 관련 메모리를 찾습니다.
-        """
-        if action == MemoryAction.SAVE:
-            # MemoryToolInput validation ensures content is present for SAVE
-            await memory_service.save_memory(user_id, content)  # type: ignore
-            return json.dumps(
-                {
-                    "status": "success",
-                    "action": "save",
-                    "content_preview": content[:50],
-                },  # type: ignore
-                ensure_ascii=False,
-            )
-        elif action == MemoryAction.SEARCH:
-            # MemoryToolInput validation ensures query is present for SEARCH
-            results = await memory_service.search_memories(user_id, query, limit)  # type: ignore
-            return json.dumps(
-                {"status": "success", "action": "search", "results": results},
-                ensure_ascii=False,
-            )
-        raise ValueError(f"지원하지 않는 액션입니다: {action}")
-
-    return manage_user_memory
-
-
-# --- Scheduler Tools ---
-
-
-def make_manage_dm_scheduler(
-    user_id: int, scheduler_service: SchedulerService
-) -> BaseTool:
-    @tool(args_schema=ScheduleToolInput)
-    async def manage_dm_scheduler(
-        action: ScheduleAction,
-        command: str | None = None,
-        trigger_at: str | None = None,
-        schedule_id: str | None = None,
-        type: str = "notification",
-        payload: dict | None = None,
-    ) -> str:
-        """지정한 시간에 사용자에게 DM 알림을 보내거나 명령(command)을 실행하도록 예약 또는 취소합니다.
-
-        - action='create': command, trigger_at이 필수입니다. type은 'notification' 또는 'command'입니다.
-        - action='cancel': schedule_id가 필수입니다.
-        """
-        if action == ScheduleAction.CREATE:
-            # ScheduleToolInput validation ensures command and trigger_at are present for CREATE
-            trigger_dt = datetime.fromisoformat(trigger_at)  # type: ignore
-            new_id = await scheduler_service.add_schedule(
-                user_id,
-                command,
-                trigger_dt,
-                type,
-                payload,  # type: ignore
-            )
-            return json.dumps(
-                {
-                    "status": "success",
-                    "action": "create",
-                    "schedule_id": str(new_id),
-                    "trigger_at": trigger_at,
-                    "type": type,
-                },
-                ensure_ascii=False,
-            )
-        elif action == ScheduleAction.CANCEL:
-            # ScheduleToolInput validation ensures schedule_id is present for CANCEL
-            success = await scheduler_service.cancel_schedule(user_id, schedule_id)  # type: ignore
-            return json.dumps(
-                {
-                    "status": "success" if success else "failed",
-                    "action": "cancel",
-                    "schedule_id": schedule_id,
-                },
-                ensure_ascii=False,
-            )
-        raise ValueError(f"지원하지 않는 액션입니다: {action}")
-
-    return manage_dm_scheduler
-
-
-# --- Google Tasks Tools ---
-
-
 def make_manage_google_tasks(user_id: int, google_service: GoogleService) -> BaseTool:
     @tool(args_schema=TaskToolInput)
     async def manage_google_tasks(
@@ -286,9 +136,6 @@ def make_manage_google_tasks(user_id: int, google_service: GoogleService) -> Bas
         raise ValueError(f"지원하지 않는 액션입니다: {action}")
 
     return manage_google_tasks
-
-
-# --- Google Calendar Tools ---
 
 
 def make_manage_google_calendar(
