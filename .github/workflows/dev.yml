@@ -3,6 +3,18 @@ name: Dev Pipeline
 on:
   push:
     branches: [ dev ]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.vscode/**'
+      - '.idea/**'
+      - '.python-version'
+      - '.gitignore'
+      - '.dockerignore'
+      - '.env.example'
+      - 'Makefile'
+      - 'docker-compose.dev.yml'
+      - 'docker-compose.test.yml'
 
 jobs:
   lint:
