@@ -1,28 +1,22 @@
 # src/panager/core/
 
-Core infrastructure and shared utilities for the Panager application.
+Core infrastructure and cross-cutting concerns for the Panager application.
 
 ## Responsibility
+- **Configuration Management**: Centralized, type-safe settings via Pydantic.
+- **Observability**: Structured logging and diagnostics.
+- **Error Handling**: Defines the global exception hierarchy.
 
-This folder is responsible for:
-- Centralized configuration management via Pydantic settings.
-- Application-wide logging configuration using `structlog`.
-- Defining base and domain-specific exception classes.
+## Design Patterns
+- **Singleton Settings**: `Settings` class using `pydantic-settings` for environment variable mapping and validation.
+- **Structured Logging**: Uses `structlog` for machine-readable logs, facilitating easier debugging in complex agentic workflows.
+- **Exception Hierarchy**: Implements `PanagerError` base class with specialized domain exceptions (e.g., `GoogleAuthRequired`, `GithubAuthRequired`).
 
-## Design
+## Data & Control Flow
+1. **Bootstrap**: `main.py` initializes `Settings` and calls `configure_logging`.
+2. **Runtime Configuration**: Modules import `Settings` to access environment variables.
+3. **Error Propagation**: Services and agents raise specialized exceptions which are caught by the Discord handler or Graph nodes to manage flow (e.g., triggering OAuth interrupts).
 
-- **Type-Safe Configuration**: Leverages `pydantic-settings` to ensure all required environment variables are present and correctly typed at startup.
-- **Structured Logging**: Uses `structlog` to provide consistent, searchable log entries.
-- **Domain Exceptions**: Provides a clear exception hierarchy (`PanagerError`).
-
-## Flow
-
-1. **Setup**: The application entry point loads `Settings` from `config.py`.
-2. **Configuration**: `configure_logging` is called with the settings.
-3. **Runtime**: Other modules import `Settings` or raise exceptions from `exceptions.py`.
-
-## Integration
-
-- **config.py**: Used by almost all modules (DB, Bot, Agent, API).
-- **logging.py**: Configures the global logging state.
-- **exceptions.py**: Shared by `agent/` and `bot/` to communicate specific failure states.
+## Integration Points
+- **Infrastructure**: Used by every package in the system (`agent`, `services`, `discord`, `api`, `db`).
+- **External Environment**: Maps OS environment variables to application-level configuration.

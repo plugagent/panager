@@ -1,35 +1,31 @@
 # src/panager/agent/
 
 ## Responsibility
-Core orchestration layer for the Panager agent. It defines the agent's cognition (LLM), memory (State), and capabilities (Tools) using LangGraph and LangChain.
-- `state.py`: Defines the `AgentState` schema and message history reducers.
-- `tools.py`: Implements per-user tool factories for Memory, Google Tasks/Calendar, and Scheduler.
-- `workflow.py`: Orchestrates the `StateGraph` logic, node transitions, and message trimming.
+Core orchestration layer implementing a **Supervisor-Worker multi-agent architecture**. It manages specialized sub-agents to handle diverse user requests across multiple integrations.
+- `supervisor.py`: Central routing logic that decides the next specialized worker or task completion.
+- `workflow.py`: Defines the global `StateGraph` and integrates worker sub-graphs.
+- `state.py`: Shared state schema (`AgentState`) using LangGraph reducers.
+- `google/`, `github/`, `notion/`, `memory/`, `scheduler/`: Domain-specific sub-agents (workers).
 
-## Design
-- **State-Oriented (`state.py`)**: Uses `AgentState` (TypedDict) with LangGraph's `add_messages` reducer to manage conversation history. It tracks `user_id`, `username`, and persistent context like `timezone` and `memory_context`.
-- **Closure-based Tool Factory (`tools.py`)**: Tools are constructed via factory functions (e.g., `make_memory_save`). This pattern injects `user_id` and service dependencies into the tool's execution scope at runtime, ensuring tools are bound to the specific user session.
-- **Protocol-Driven**: Employs the `UserSessionProvider` protocol to decouple agent logic from the Discord-specific client, facilitating easier testing and alternative interfaces.
-- **ReAct Pattern (`workflow.py`)**: Implements a standard cyclic workflow (Agent -> Tools -> Agent) using a `StateGraph`.
+## Design Patterns
+- **Supervisor Pattern**: A central LLM-based node (`supervisor_node`) manages task delegation and synthesis.
+- **Hierarchical Graphs**: Each worker is a separate sub-graph, allowing for modular capability expansion.
+- **State-Oriented**: Uses `AgentState` with `add_messages` to maintain conversation history and cross-worker context.
+- **Interrupt/Resume Pattern**: Uses LangGraph `interrupt` for OAuth flows, allowing the agent to pause for user authentication and resume exactly where it left off.
+- **Closure-based Tool Injection**: Service dependencies are injected into worker tools via factory functions, bound to specific `user_id` sessions.
 
-## Flow
-1. **Entry**: Graph starts at the `agent` node via `START`.
-2. **Cognition (`_agent_node`)**: 
-   - **Contextualization**: Resolves timezone and formats current time with relative date markers (내일, 모레, etc.) to ground the LLM.
-   - **Memory Injection**: Attaches relevant memory context retrieved from previous interactions.
-   - **History Management**: Trims the message history using `trim_messages` (strategy="last") to maintain token efficiency based on `checkpoint_max_tokens`.
-   - **System Trigger Handling**: If `is_system_trigger` is set, the prompt is adjusted to handle scheduled tasks/notifications.
-   - **LLM Call**: Invokes the LLM with a system prompt and dynamically bound tools.
-3. **Routing (`_should_continue`)**: A conditional edge that checks for `tool_calls` in the AI's response to decide whether to stop or execute actions.
-4. **Action (`_tool_node`)**: 
-   - **Parallel Execution**: Dispatches multiple tool calls concurrently using `asyncio.gather`.
-   - **Auth Interception**: Specifically catches `GoogleAuthRequired` exceptions, preserves the user's original intent in `pending_messages`, and returns an OAuth URL.
-5. **Loop**: Tool results are fed back into the `agent` node for final synthesis and response.
+## Data & Control Flow
+1. **Routing (`supervisor_node`)**: Receives the user message, analyzes current state (including `task_summary` from previous workers), and selects the `next_worker` via the `Route` model.
+2. **Specialist Execution**: The main graph routes control to the selected worker node (e.g., `GoogleWorker`).
+3. **Internal Processing**: The worker sub-graph executes its logic, potentially calling multiple tools (Calendar, Tasks, etc.).
+4. **Auth Interception**: If a worker raises an auth exception, the graph transitions to `auth_interrupt`, generating an OAuth URL and suspending execution.
+5. **Synthesis**: Upon worker completion, control returns to the Supervisor with a `task_summary` for final synthesis or further delegation.
+6. **Termination**: The Supervisor returns `FINISH` to end the graph execution and deliver the final response.
 
-## Integration
-- **Bot Handlers**: The compiled graph is consumed by `panager.discord.handlers` to process DM interactions.
-- **Service Layer**:
-  - `MemoryService`: Provides vector-based long-term memory.
-  - `GoogleService`: Manages Google Calendar and Tasks integration with OAuth.
-  - `SchedulerService`: Allows the agent to schedule future DM notifications or commands.
-- **Checkpointing**: Integrated with `AsyncPostgresSaver` in the main entrypoint to persist state across bot restarts using `thread_id=user_id`.
+## Integration Points
+- **Discord Handlers**: Consumes the compiled `StateGraph` to process real-time DM interactions.
+- **Service Layer**: 
+  - `GoogleService`, `GithubService`, `NotionService`: External API orchestrators.
+  - `MemoryService`: Semantic search/storage for user context.
+  - `SchedulerService`: Infrastructure for delayed notifications and re-entry commands.
+- **Persistence**: Integrated with `AsyncPostgresSaver` for durable conversation checkpoints.
