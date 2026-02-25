@@ -8,6 +8,7 @@ on:
       - '**/*.md'
       - '.gitignore'
       - '.dockerignore'
+      - '.slim/**'
       - '.env.example'
       - 'Makefile'
       - 'docker-compose.dev.yml'
