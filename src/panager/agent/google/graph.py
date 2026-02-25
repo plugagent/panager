@@ -44,7 +44,14 @@ def build_google_worker(
             max_tokens=4000,  # 워커별 적절한 한도 (설정에서 가져올 수도 있음)
         )
         messages = [SystemMessage(content=system_prompt)] + trimmed_messages
-        response = await llm.ainvoke(messages)
+
+        user_id = state["main_context"]["user_id"]
+        tools = [
+            make_manage_google_tasks(user_id, google_service),
+            make_manage_google_calendar(user_id, google_service),
+        ]
+        llm_with_tools = llm.bind_tools(tools)
+        response = await llm_with_tools.ainvoke(messages)
 
         res: dict = {"messages": [response]}
         # 도구 호출이 없으면 최종 응답으로 간주하고 요약을 상태에 저장

@@ -13,7 +13,7 @@ from panager.core.exceptions import GithubAuthRequired
 
 if TYPE_CHECKING:
     from langchain_openai import ChatOpenAI
-    from langgraph.graph import CompiledGraph
+    from langgraph.graph.state import CompiledStateGraph as CompiledGraph
 
     from panager.services.github import GithubService
 
@@ -25,6 +25,10 @@ def build_github_worker(
     """GitHub 저장소 조회 및 Webhook 설정을 위한 전담 워커 서브 그래프를 생성합니다."""
 
     async def _worker_agent_node(state: WorkerState) -> dict:
+        user_id = state["main_context"]["user_id"]
+        tools = make_github_tools(user_id, github_service)
+        llm_with_tools = llm.bind_tools(tools)
+
         system_prompt = (
             "당신은 GitHub 저장소 관리 및 Webhook 설정을 담당하는 전문가입니다. "
             f"현재 작업: {state['task']}\n"
@@ -33,7 +37,7 @@ def build_github_worker(
         )
         trimmed_messages = trim_agent_messages(state["messages"], max_tokens=4000)
         messages = [SystemMessage(content=system_prompt)] + trimmed_messages
-        response = await llm.ainvoke(messages)
+        response = await llm_with_tools.ainvoke(messages)
 
         res: dict = {"messages": [response]}
         if not response.tool_calls:
