@@ -134,9 +134,21 @@ jobs:
           ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
             cd ${{ vars.DEPLOY_PATH }}
             docker compose pull
-            docker compose up -d --force-recreate --remove-orphans
-            docker image prune -f
+            docker compose up -d --wait
           EOF
+      - name: Rollback on Failure
+        if: failure() && steps.deploy.outcome == 'failure'
+        run: |
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
+            cd ${{ vars.DEPLOY_PATH }}
+            sed -i "s/IMAGE_TAG=.*/IMAGE_TAG=${{ env.PREVIOUS_SHA }}/" .env
+            docker compose pull
+            docker compose up -d --wait
+          EOF
+      - name: Post-Deployment Cleanup
+        if: success()
+        run: |
+          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "cd ${{ vars.DEPLOY_PATH }} && docker image prune -f"
       - name: Notify Success
         if: success()
         run: |
