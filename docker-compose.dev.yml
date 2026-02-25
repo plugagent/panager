@@ -1,4 +1,12 @@
 services:
+  model-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.model
+    volumes:
+      - hf_cache:/app/.cache/huggingface
+    restart: "no"
+
   migrate:
     build:
       context: .
@@ -27,10 +35,13 @@ services:
     volumes:
       - ./src:/app/src
       - panager_logs:/app/logs
+      - hf_cache:/app/.cache/huggingface
     depends_on:
       db:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      model-init:
         condition: service_completed_successfully
 
   db:
@@ -52,3 +63,4 @@ services:
 volumes:
   postgres_data_dev:
   panager_logs:
+  hf_cache:
