@@ -6,9 +6,6 @@ on:
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
-      - '.vscode/**'
-      - '.idea/**'
-      - '.python-version'
       - '.gitignore'
       - '.dockerignore'
       - '.env.example'
