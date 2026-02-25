@@ -1,16 +1,3 @@
-# --- Stage 0: Model Downloader ---
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS model-downloader
-
-WORKDIR /app
-
-# 모델 다운로드를 위한 환경 변수 설정
-ENV HF_HOME=/app/.cache/huggingface
-
-# 모델 미리 다운로드 (별도 스테이지에서 수행하여 캐시 최적화)
-RUN uv run --with sentence-transformers python -c \
-    "from sentence_transformers import SentenceTransformer; \
-     SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')"
-
 # --- Stage 1: Builder ---
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
 
@@ -26,9 +13,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
-
-# 다운로드된 모델 복사
-COPY --from=model-downloader /app/.cache/huggingface /app/.cache/huggingface
 
 # 소스 코드 복사
 COPY src/ ./src/
@@ -83,7 +67,6 @@ COPY --from=builder --chown=panager:panager /app/.venv /app/.venv
 COPY --from=builder --chown=panager:panager /app/src /app/src
 COPY --from=builder --chown=panager:panager /app/alembic /app/alembic
 COPY --from=builder --chown=panager:panager /app/alembic.ini /app/alembic.ini
-COPY --from=builder --chown=panager:panager /app/.cache/huggingface /app/.cache/huggingface
 
 USER panager
 
