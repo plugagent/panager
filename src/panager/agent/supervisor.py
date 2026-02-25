@@ -9,6 +9,8 @@ from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
 )
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.exceptions import OutputParserException
 
 from panager.agent.state import AgentState, Route
 from panager.agent.utils import WEEKDAY_KO, get_llm, trim_agent_messages
@@ -42,7 +44,8 @@ async def supervisor_node(
     weekday_ko = WEEKDAY_KO[now.weekday()]
     now_str = now.strftime(f"%Y년 %m월 %d일 ({weekday_ko}) %H:%M:%S")
 
-    llm = get_llm(settings).with_structured_output(Route)
+    llm = get_llm(settings)
+    parser = PydanticOutputParser(pydantic_object=Route)
 
     system_prompt = (
         "You are a supervisor managing a personal assistant bot. Decide which specialist worker to call next or if the task is finished.\n"
@@ -51,7 +54,9 @@ async def supervisor_node(
         "- GoogleWorker: Handles Google Calendar and Tasks (listing, creating, deleting).\n"
         "- MemoryWorker: Searches or saves user's personal information and context.\n"
         "- SchedulerWorker: Manages DM notifications and scheduled tasks.\n\n"
-        "If the user's request is handled or no further action is needed, return 'FINISH'."
+        "If the user's request is handled or no further action is needed, return 'FINISH'.\n"
+        f"{parser.get_format_instructions()}\n"
+        "IMPORTANT: Respond ONLY with a valid JSON object. Do not wrap it in markdown code blocks."
     )
 
     # 메시지 정리 (예약어 제거)
@@ -86,8 +91,14 @@ async def supervisor_node(
             SystemMessage(content=f"Recent worker activity summary: {task_summary}")
         )
 
-    response = await llm.ainvoke(messages)
-    assert isinstance(response, Route)
+    try:
+        response_msg = await llm.ainvoke(messages)
+        # raw content에서 JSON 추출 및 파싱
+        response = parser.parse(response_msg.content)
+    except (OutputParserException, Exception) as e:
+        log.error("Supervisor routing failed: %s", e, exc_info=True)
+        # 파싱 실패 시 안전하게 종료로 폴백
+        return {"next_worker": "FINISH"}
 
     res: dict = {"next_worker": response.next_worker}
     if "timezone" not in state:
