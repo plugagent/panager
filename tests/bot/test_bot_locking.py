@@ -12,6 +12,8 @@ def mock_services():
     return {
         "memory": MagicMock(),
         "google": MagicMock(),
+        "github": MagicMock(),
+        "notion": MagicMock(),
         "scheduler": MagicMock(),
     }
 
@@ -22,6 +24,8 @@ async def test_bot_lock_prevents_concurrent_access(mock_services):
     bot = PanagerBot(
         memory_service=mock_services["memory"],
         google_service=mock_services["google"],
+        github_service=mock_services["github"],
+        notion_service=mock_services["notion"],
         scheduler_service=mock_services["scheduler"],
     )
     bot.graph = MagicMock()
@@ -68,6 +72,8 @@ async def test_bot_trigger_task_uses_lock(mock_services):
     bot = PanagerBot(
         memory_service=mock_services["memory"],
         google_service=mock_services["google"],
+        github_service=mock_services["github"],
+        notion_service=mock_services["notion"],
         scheduler_service=mock_services["scheduler"],
     )
     bot.graph = MagicMock()

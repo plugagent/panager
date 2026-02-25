@@ -11,6 +11,13 @@ def test_settings_loads_from_env(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "test_client_id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test_secret")
     monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://localhost/callback")
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "github_id")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "github_secret")
+    monkeypatch.setenv("GITHUB_REDIRECT_URI", "http://localhost/github/callback")
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "webhook_secret")
+    monkeypatch.setenv("NOTION_CLIENT_ID", "notion_id")
+    monkeypatch.setenv("NOTION_CLIENT_SECRET", "notion_secret")
+    monkeypatch.setenv("NOTION_REDIRECT_URI", "http://localhost/notion/callback")
     monkeypatch.setenv("LOG_FILE_PATH", "/tmp/test.log")
 
     from panager.core.config import Settings
@@ -33,6 +40,13 @@ def test_postgres_dsn_property(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "cid")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "cs")
     monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://localhost/callback")
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "github_id")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "github_secret")
+    monkeypatch.setenv("GITHUB_REDIRECT_URI", "http://localhost/github/callback")
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "webhook_secret")
+    monkeypatch.setenv("NOTION_CLIENT_ID", "notion_id")
+    monkeypatch.setenv("NOTION_CLIENT_SECRET", "notion_secret")
+    monkeypatch.setenv("NOTION_REDIRECT_URI", "http://localhost/notion/callback")
     monkeypatch.setenv("LOG_FILE_PATH", "/tmp/test.log")
 
     from panager.core.config import Settings
