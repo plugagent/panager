@@ -63,6 +63,9 @@ FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 
+# 헬스체크를 위한 curl 설치
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # 실행 시 필요한 환경 변수
 ENV PATH="/app/.venv/bin:$PATH" \
     HF_HOME=/app/.cache/huggingface \
