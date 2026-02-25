@@ -30,7 +30,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          dockerfile: Dockerfile.model
+          file: Dockerfile.model
           platforms: linux/amd64
           push: true
           tags: ghcr.io/plugagent/panager-model-init:${{ github.event.inputs.tag }}
