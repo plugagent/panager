@@ -77,6 +77,7 @@ jobs:
 
   build:
     name: Build & Push (Dev)
+    needs: [lint, test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -118,40 +119,27 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:panager-cd
-      - name: Prepare Rollback Context
-        id: prep
+      - name: Setup SSH
         run: |
-          PREVIOUS_SHA=$(ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "grep IMAGE_TAG ${{ vars.DEPLOY_PATH }}/.env 2>/dev/null | cut -d'=' -f2 || echo 'dev'")
-          echo "PREVIOUS_SHA=$PREVIOUS_SHA" >> $GITHUB_ENV
+          mkdir -p ~/.ssh
+          ssh-keyscan ${{ secrets.SERVER_TS_IP }} >> ~/.ssh/known_hosts
       - name: Deploy
         id: deploy
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
           echo "${{ secrets.SPECIFIC_ENV }}" >> .env
           echo "IMAGE_TAG=${{ github.sha }}" >> .env
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
-          scp -o StrictHostKeyChecking=no docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
+          ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "mkdir -p ${{ vars.DEPLOY_PATH }}"
+          scp docker-compose.yml .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }}:${{ vars.DEPLOY_PATH }}/
+          ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
             cd ${{ vars.DEPLOY_PATH }}
             docker compose pull
             docker compose up -d --wait
           EOF
-      - name: Rollback on Failure
-        if: failure() && steps.deploy.outcome == 'failure'
-        run: |
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} << 'EOF'
-            cd ${{ vars.DEPLOY_PATH }}
-            sed -i "s/IMAGE_TAG=.*/IMAGE_TAG=${{ env.PREVIOUS_SHA }}/" .env
-            docker compose pull
-            docker compose up -d --wait
-          EOF
-      - name: Post-Deployment Cleanup
+      - name: Post-Deployment Success
         if: success()
         run: |
-          ssh -T -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "cd ${{ vars.DEPLOY_PATH }} && docker image prune -f"
-      - name: Notify Success
-        if: success()
-        run: |
+          ssh -T ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_TS_IP }} "cd ${{ vars.DEPLOY_PATH }} && docker image prune -f"
           curl -X POST -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
