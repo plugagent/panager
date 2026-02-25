@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
 import logging
 import zoneinfo
 from datetime import datetime, timedelta
@@ -17,7 +18,7 @@ from langchain_core.messages import (
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
-from panager.agent.state import AgentState
+from panager.agent.state import AgentState, WorkerState
 from panager.core.config import Settings
 from panager.core.exceptions import GoogleAuthRequired
 
@@ -220,6 +221,75 @@ def _should_continue(state: AgentState) -> Literal["tools", "__end__"]:
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "tools"
     return END
+
+
+def build_google_worker(
+    llm: ChatOpenAI,
+    tools: list,
+    google_service: GoogleService,
+) -> CompiledGraph:
+    """Google Calendar 및 Tasks 관리를 위한 전담 워커 서브 그래프를 생성합니다."""
+
+    async def _worker_agent_node(state: WorkerState) -> dict:
+        system_prompt = (
+            "당신은 Google Calendar와 Google Tasks 관리를 담당하는 전문가입니다. "
+            "사용자의 요청에 따라 일정을 조회, 생성, 삭제하거나 할 일을 관리하세요. "
+            "작업이 완료되면 수행한 내용을 간결하게 요약하여 보고하십시오."
+        )
+        messages = [SystemMessage(content=system_prompt)] + state["messages"]
+        response = await llm.ainvoke(messages)
+        return {"messages": [response]}
+
+    async def _worker_tool_node(state: WorkerState) -> dict:
+        tool_map = {t.name: t for t in tools}
+        last_message = state["messages"][-1]
+        if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+            return {"messages": []}
+
+        tool_messages = []
+        auth_url = None
+
+        for tool_call in last_message.tool_calls:
+            try:
+                result = await tool_map[tool_call["name"]].ainvoke(tool_call["args"])
+                tool_messages.append(
+                    ToolMessage(content=str(result), tool_call_id=tool_call["id"])
+                )
+            except GoogleAuthRequired:
+                auth_url = google_service.get_auth_url(state["user_id"])
+                tool_messages.append(
+                    ToolMessage(
+                        content=json.dumps(
+                            {"status": "error", "message": "Google 인증이 필요합니다."},
+                            ensure_ascii=False,
+                        ),
+                        tool_call_id=tool_call["id"],
+                    )
+                )
+                break  # 인증이 필요한 경우 추가 도구 실행 중단
+
+        res: dict = {"messages": tool_messages}
+        if auth_url:
+            res["auth_request_url"] = auth_url
+        return res
+
+    def _should_continue(state: WorkerState) -> Literal["tools", "__end__"]:
+        if state.get("auth_request_url"):
+            return END
+        last_message = state["messages"][-1]
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
+            return "tools"
+        return END
+
+    workflow = StateGraph(WorkerState)
+    workflow.add_node("agent", _worker_agent_node)
+    workflow.add_node("tools", _worker_tool_node)
+
+    workflow.add_edge(START, "agent")
+    workflow.add_conditional_edges("agent", _should_continue)
+    workflow.add_edge("tools", "agent")
+
+    return workflow.compile()
 
 
 def build_graph(

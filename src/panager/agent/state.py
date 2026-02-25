@@ -12,3 +12,9 @@ class AgentState(TypedDict):
     memory_context: str
     is_system_trigger: NotRequired[bool]
     timezone: NotRequired[str]  # e.g. "Asia/Seoul", defaults to "Asia/Seoul" if absent
+
+
+class WorkerState(TypedDict):
+    user_id: int
+    messages: Annotated[list, add_messages]
+    auth_request_url: NotRequired[str]
