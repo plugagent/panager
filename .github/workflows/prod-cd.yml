@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GHCR
@@ -30,10 +28,13 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          target: runtime
           tags: |
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
-          cache-from: type=gha
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/${{ github.repository }}:latest
           cache-to: type=gha,mode=max
 
   deploy:

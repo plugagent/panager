@@ -59,7 +59,7 @@ USER panager
 CMD ["uv", "run", "watchfiles", "python -m panager.main", "src"]
 
 # --- Stage 3: Runtime ---
-FROM python:3.13-slim-bookworm
+FROM python:3.13-slim-bookworm AS runtime
 
 WORKDIR /app
 
