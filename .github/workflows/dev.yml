@@ -105,8 +105,8 @@ jobs:
             ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: |
             type=gha
-            type=registry,ref=ghcr.io/${{ github.repository }}:dev
-          cache-to: type=gha,mode=max
+            type=registry,ref=ghcr.io/${{ github.repository }}-cache:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}-cache:buildcache,mode=max,compression=zstd,oci-mediatypes=true,ignore-error=true
 
   deploy:
     name: Deploy to Dev

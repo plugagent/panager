@@ -80,4 +80,4 @@ jobs:
           target: runtime
           cache-from: |
             type=gha
-            type=registry,ref=ghcr.io/${{ github.repository }}:latest
+            type=registry,ref=ghcr.io/${{ github.repository }}-cache:buildcache
