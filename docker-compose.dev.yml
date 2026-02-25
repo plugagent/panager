@@ -1,5 +1,6 @@
 services:
   model-init:
+    image: ghcr.io/plugagent/panager-model-init:${MODEL_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.model
