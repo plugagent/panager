@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import operator
 from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.messages import AnyMessage
@@ -11,7 +12,12 @@ class Route(BaseModel):
     """The next worker to call or FINISH."""
 
     next_worker: Literal[
-        "GoogleWorker", "MemoryWorker", "SchedulerWorker", "FINISH"
+        "GoogleWorker",
+        "MemoryWorker",
+        "SchedulerWorker",
+        "GithubWorker",
+        "NotionWorker",
+        "FINISH",
     ] = Field(
         description="The next worker to handle the task, or 'FINISH' if the task is complete."
     )
@@ -28,6 +34,7 @@ class AgentState(TypedDict):
     next_worker: NotRequired[str]
     auth_request_url: NotRequired[str | None]
     task_summary: NotRequired[str]
+    pending_reflections: NotRequired[Annotated[list[dict], operator.add]]
 
 
 class WorkerState(TypedDict):

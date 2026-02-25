@@ -18,6 +18,8 @@ from panager.core.logging import configure_logging
 from panager.db.connection import close_pool, init_pool
 from panager.discord.bot import PanagerBot
 from panager.services.google import GoogleService
+from panager.services.github import GithubService
+from panager.services.notion import NotionService
 from panager.services.memory import MemoryService
 from panager.services.scheduler import SchedulerService
 
@@ -100,12 +102,16 @@ async def main() -> None:
     # 4. 서비스 레이어 초기화
     memory_service = MemoryService(pool)
     google_service = GoogleService(settings, pool)
+    github_service = GithubService(settings, pool)
+    notion_service = NotionService(settings, pool)
     scheduler_service = SchedulerService(pool)
 
     # 5. Discord 봇 초기화 (UserSessionProvider 구현체)
     bot = PanagerBot(
         memory_service=memory_service,
         google_service=google_service,
+        github_service=github_service,
+        notion_service=notion_service,
         scheduler_service=scheduler_service,
     )
 
@@ -115,6 +121,8 @@ async def main() -> None:
         session_provider=bot,
         memory_service=memory_service,
         google_service=google_service,
+        github_service=github_service,
+        notion_service=notion_service,
         scheduler_service=scheduler_service,
     )
     bot.graph = graph

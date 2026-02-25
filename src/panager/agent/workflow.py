@@ -8,6 +8,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from panager.agent.google.graph import build_google_worker
+from panager.agent.github.graph import build_github_worker
+from panager.agent.notion.graph import build_notion_worker
 from panager.agent.memory.graph import build_memory_worker
 from panager.agent.scheduler.graph import build_scheduler_worker
 from panager.agent.state import AgentState, WorkerState
@@ -20,6 +22,8 @@ if TYPE_CHECKING:
     from langgraph.graph import CompiledGraph
     from panager.agent.interfaces import UserSessionProvider
     from panager.services.google import GoogleService
+    from panager.services.github import GithubService
+    from panager.services.notion import NotionService
     from panager.services.memory import MemoryService
     from panager.services.scheduler import SchedulerService
 
@@ -50,10 +54,18 @@ def _build_tools(
 
 
 def auth_interrupt_node(state: AgentState):
-    """Google 인증이 필요한 경우 실행을 일시 중단하고 사용자 승인을 기다립니다."""
+    """인증이 필요한 경우 실행을 일시 중단하고 사용자 승인을 기다립니다."""
     auth_url = state.get("auth_request_url")
+    current_worker = state.get("next_worker")
+
     if auth_url:
-        resume_data = interrupt({"type": "google_auth_required", "url": auth_url})
+        provider = "google"
+        if "github.com" in auth_url:
+            provider = "github"
+        elif "notion.so" in auth_url or "api.notion.com" in auth_url:
+            provider = "notion"
+
+        resume_data = interrupt({"type": f"{provider}_auth_required", "url": auth_url})
 
         # resume_data가 "auth_success" 문자열이거나 {"status": "auth_success"} 형태인 경우 처리
         is_success = False
@@ -68,8 +80,8 @@ def auth_interrupt_node(state: AgentState):
         if is_success:
             return {
                 "auth_request_url": None,
-                "next_worker": "GoogleWorker",
-            }  # Retry GoogleWorker
+                "next_worker": current_worker,
+            }  # Retry previous worker
 
         # 인증 취소 또는 다른 데이터가 들어온 경우 종료로 유도
         return {
@@ -84,6 +96,8 @@ def build_graph(
     session_provider: UserSessionProvider,
     memory_service: MemoryService,
     google_service: GoogleService,
+    github_service: GithubService,
+    notion_service: NotionService,
     scheduler_service: SchedulerService,
 ) -> CompiledGraph:
     settings = Settings()
@@ -93,6 +107,8 @@ def build_graph(
     google_worker = build_google_worker(
         llm, google_service, memory_service, scheduler_service
     )
+    github_worker = build_github_worker(llm, github_service)
+    notion_worker = build_notion_worker(llm, notion_service)
     memory_worker = build_memory_worker(llm)
     scheduler_worker = build_scheduler_worker(llm)
 
@@ -146,7 +162,35 @@ def build_graph(
             "task_summary": res.get("task_summary", ""),
         }
 
+    async def call_github_worker(state: AgentState) -> dict:
+        worker_state: WorkerState = {
+            "messages": state["messages"],
+            "task": "Manage GitHub Repositories and Webhooks",
+            "main_context": dict(state),
+        }
+        res = await github_worker.ainvoke(worker_state)
+        return {
+            "messages": res["messages"],
+            "task_summary": res.get("task_summary", ""),
+            "auth_request_url": res.get("auth_request_url"),
+        }
+
+    async def call_notion_worker(state: AgentState) -> dict:
+        worker_state: WorkerState = {
+            "messages": state["messages"],
+            "task": "Manage Notion Pages and Databases",
+            "main_context": dict(state),
+        }
+        res = await notion_worker.ainvoke(worker_state)
+        return {
+            "messages": res["messages"],
+            "task_summary": res.get("task_summary", ""),
+            "auth_request_url": res.get("auth_request_url"),
+        }
+
     graph.add_node("GoogleWorker", call_google_worker)
+    graph.add_node("GithubWorker", call_github_worker)
+    graph.add_node("NotionWorker", call_notion_worker)
     graph.add_node("MemoryWorker", call_memory_worker)
     graph.add_node("SchedulerWorker", call_scheduler_worker)
 
@@ -165,13 +209,15 @@ def build_graph(
     graph.add_edge("MemoryWorker", "supervisor")
     graph.add_edge("SchedulerWorker", "supervisor")
 
-    # GoogleWorker는 인증 필요 여부에 따라 분기
-    def _after_google_worker(state: AgentState) -> str:
+    # 인증 가능성이 있는 워커들은 인증 필요 여부에 따라 분기
+    def _after_auth_worker(state: AgentState) -> str:
         if state.get("auth_request_url"):
             return "auth_interrupt"
         return "supervisor"
 
-    graph.add_conditional_edges("GoogleWorker", _after_google_worker)
+    graph.add_conditional_edges("GoogleWorker", _after_auth_worker)
+    graph.add_conditional_edges("GithubWorker", _after_auth_worker)
+    graph.add_conditional_edges("NotionWorker", _after_auth_worker)
 
     # 인증 인터럽트 후 처리
     graph.add_conditional_edges("auth_interrupt", _route)

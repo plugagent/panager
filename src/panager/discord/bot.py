@@ -12,6 +12,8 @@ from panager.discord.handlers import _stream_agent_response, handle_dm
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledGraph
     from panager.services.google import GoogleService
+    from panager.services.github import GithubService
+    from panager.services.notion import NotionService
     from panager.services.memory import MemoryService
     from panager.services.scheduler import SchedulerService
 
@@ -28,6 +30,8 @@ class PanagerBot(discord.Client):
         self,
         memory_service: MemoryService,
         google_service: GoogleService,
+        github_service: GithubService,
+        notion_service: NotionService,
         scheduler_service: SchedulerService,
     ) -> None:
         intents = discord.Intents.default()
@@ -37,6 +41,8 @@ class PanagerBot(discord.Client):
 
         self.memory_service = memory_service
         self.google_service = google_service
+        self.github_service = github_service
+        self.notion_service = notion_service
         self.scheduler_service = scheduler_service
 
         # 스케줄러 서비스에 알림 발송용 프로바이더로 자신을 등록
@@ -86,12 +92,15 @@ class PanagerBot(discord.Client):
                 user = await self.fetch_user(user_id)
                 dm = await user.create_dm()
                 config = {"configurable": {"thread_id": str(user_id)}}
-                state = {
+                state: dict[str, Any] = {
                     "user_id": user_id,
                     "username": str(user),
                     "messages": [HumanMessage(content=command)],
                     "is_system_trigger": True,
                 }
+                if payload and "pending_reflections" in payload:
+                    state["pending_reflections"] = payload["pending_reflections"]
+
                 log.info(
                     "예약된 태스크 트리거 (user_id=%d, command=%s)", user_id, command
                 )

@@ -52,6 +52,8 @@ async def supervisor_node(
         f"Current Time: {now_str} ({tz_name})\n\n"
         "Specialists:\n"
         "- GoogleWorker: Handles Google Calendar and Tasks (listing, creating, deleting).\n"
+        "- GithubWorker: Manages GitHub repositories and webhook settings.\n"
+        "- NotionWorker: Manages Notion databases and pages (searching, creating).\n"
         "- MemoryWorker: Searches or saves user's personal information and context.\n"
         "- SchedulerWorker: Manages DM notifications and scheduled tasks.\n\n"
         "If the user's request is handled or no further action is needed, return 'FINISH'.\n"
@@ -81,6 +83,13 @@ async def supervisor_node(
 
     if state.get("is_system_trigger"):
         system_prompt += "\n\nNote: This is an automated trigger (e.g., scheduled notification). Please handle it accordingly. (과거에 예약된 작업입니다. 사용자가 보낸 것처럼 자연스럽게 처리하세요.)"
+
+    pending_reflections = state.get("pending_reflections")
+    if pending_reflections:
+        reflections_str = "\n".join(
+            [f"- {r.get('repo')}: {r.get('commit_msg')}" for r in pending_reflections]
+        )
+        system_prompt += f"\n\nPending Reflections (GitHub Push Events):\n{reflections_str}\n(사용자에게 이 푸시 이벤트들에 대해 회고할지 물어보고, 답변을 받으면 NotionWorker를 통해 기록하세요.)"
 
     messages = [SystemMessage(content=system_prompt)] + trimmed_messages
 

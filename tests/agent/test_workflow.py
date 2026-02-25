@@ -21,6 +21,8 @@ def mock_services():
         "session_provider": MagicMock(),
         "memory_service": MagicMock(),
         "google_service": MagicMock(),
+        "github_service": MagicMock(),
+        "notion_service": MagicMock(),
         "scheduler_service": MagicMock(),
     }
 
@@ -35,6 +37,8 @@ async def test_graph_builds_successfully(mock_services, mock_settings):
             mock_services["session_provider"],
             mock_services["memory_service"],
             mock_services["google_service"],
+            mock_services["github_service"],
+            mock_services["notion_service"],
             mock_services["scheduler_service"],
         )
         assert graph is not None
@@ -62,6 +66,8 @@ async def test_graph_processes_message(mock_services, mock_settings):
             mock_services["session_provider"],
             mock_services["memory_service"],
             mock_services["google_service"],
+            mock_services["github_service"],
+            mock_services["notion_service"],
             mock_services["scheduler_service"],
         )
         assert graph is not None
