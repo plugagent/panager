@@ -35,6 +35,10 @@ COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini pyproject.toml uv.lock ./
 
+# 프로젝트 설치 (src-layout 프로젝트를 venv에 설치)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
 # --- Stage 2: Development ---
 FROM builder AS dev
 
