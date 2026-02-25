@@ -27,6 +27,17 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 5s
 
   db:
     image: pgvector/pgvector:pg16
