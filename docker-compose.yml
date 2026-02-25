@@ -1,4 +1,12 @@
 services:
+  model-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.model
+    volumes:
+      - hf_cache:/app/.cache/huggingface
+    restart: "no"
+
   migrate:
     image: ghcr.io/plugagent/panager:${IMAGE_TAG:-latest}
     command: alembic upgrade head
@@ -21,10 +29,13 @@ services:
       - "${PORT:-8000}:8000"
     volumes:
       - panager_logs:/app/logs
+      - hf_cache:/app/.cache/huggingface
     depends_on:
       db:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      model-init:
         condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
@@ -56,3 +67,4 @@ services:
 volumes:
   postgres_data:
   panager_logs:
+  hf_cache:
