@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     google_client_secret: str
     google_redirect_uri: str
 
+    # GitHub OAuth
+    github_client_id: str
+    github_client_secret: str
+    github_redirect_uri: str
+    github_webhook_secret: str
+
+    # Notion OAuth
+    notion_client_id: str
+    notion_client_secret: str
+    notion_redirect_uri: str
+
     # 로그
     log_file_path: str
     log_max_bytes: int = 10_485_760
