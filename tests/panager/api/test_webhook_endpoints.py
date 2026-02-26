@@ -134,6 +134,41 @@ async def test_github_webhook_ignored_missing_info(app, mock_bot):
 
 
 @pytest.mark.asyncio
+async def test_verify_signature_no_secret():
+    mock_request = AsyncMock(spec=Request)
+    mock_request.body.return_value = b"body"
+
+    mock_settings = MagicMock()
+    mock_settings.github_webhook_secret = None
+
+    with patch("panager.api.webhooks._get_settings", return_value=mock_settings):
+        with pytest.raises(HTTPException) as excinfo:
+            await verify_signature(mock_request, "sha256=abc")
+        assert excinfo.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_github_webhook_invalid_json(app, mock_bot):
+    secret = "test_secret"
+    body = b"invalid json"
+    signature = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+    mock_settings = MagicMock()
+    mock_settings.github_webhook_secret = secret
+
+    with patch("panager.api.webhooks._get_settings", return_value=mock_settings):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post(
+                "/webhooks/github",
+                content=body,
+                headers={"X-Hub-Signature-256": signature},
+            )
+            assert response.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_github_webhook_no_users(app, mock_bot):
     secret = "test_secret"
     payload = {
@@ -167,3 +202,11 @@ async def test_github_webhook_no_users(app, mock_bot):
             assert response.status_code == 200
             assert response.json()["status"] == "ignored"
             assert response.json()["reason"] == "No registered users"
+
+
+def test_get_settings():
+    from panager.api.webhooks import _get_settings
+    from panager.core.config import Settings
+
+    settings = _get_settings()
+    assert isinstance(settings, Settings)

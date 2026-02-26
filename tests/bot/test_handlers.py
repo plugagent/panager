@@ -230,3 +230,71 @@ async def test_handle_dm_registers_user_and_calls_stream():
         assert args[0] == mock_graph
         assert args[1]["user_id"] == 123
         assert args[1]["messages"][0].content == "hello"
+
+
+@pytest.mark.asyncio
+async def test_stream_skips_invalid_chunks():
+    """Verify that non-string chunks or empty chunks are skipped."""
+    from panager.discord.handlers import _stream_agent_response
+
+    mock_channel = MagicMock()
+    sent_message = AsyncMock()
+    sent_message.edit = AsyncMock()
+    mock_channel.send = AsyncMock(return_value=sent_message)
+
+    mock_graph = MagicMock()
+
+    async def fake_stream():
+        # Use MagicMock instead of AIMessageChunk to avoid validation errors
+        chunk1 = MagicMock()
+        chunk1.content = 123
+        yield (chunk1, {})  # Not a string
+
+        chunk2 = MagicMock()
+        chunk2.content = ""
+        yield (chunk2, {})  # Empty
+
+        yield (AIMessageChunk(content="valid"), {})
+
+    mock_graph.astream.return_value = fake_stream()
+
+    state = {"user_id": 1, "username": "test", "messages": []}
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Mock time to trigger edit
+    with patch("time.monotonic", side_effect=[0.0, 1.0, 2.0, 3.0]):
+        await _stream_agent_response(mock_graph, state, config, mock_channel)
+
+    sent_message.edit.assert_called_with(content="valid")
+
+
+@pytest.mark.asyncio
+async def test_stream_delete_error_handled():
+    """Verify that delete errors are caught."""
+    from panager.discord.handlers import _stream_agent_response
+
+    mock_channel = MagicMock()
+    thinking_msg = AsyncMock()
+    msg2 = AsyncMock()
+    msg3 = AsyncMock()
+    msg3.delete.side_effect = Exception("Delete failed")
+
+    # Use unique mocks for each send call
+    mock_channel.send = AsyncMock(side_effect=[thinking_msg, msg2, msg3])
+
+    # current_msg_index = 2 -> sends msg2, msg3
+    # final full_text is short -> msg3.delete() is called
+    mock_graph = MagicMock()
+    mock_graph.astream.return_value = _make_fake_stream(" " * 20)
+
+    state = {"user_id": 1, "username": "test", "messages": []}
+    config = {"configurable": {"thread_id": "1"}}
+
+    with (
+        patch("panager.discord.handlers.MAX_MESSAGE_LENGTH", 10),
+        patch("time.monotonic", side_effect=[0.3, 1.0, 2.0, 3.0]),
+    ):
+        await _stream_agent_response(mock_graph, state, config, mock_channel)
+
+    msg3.delete.assert_awaited_once()
+    # Should not raise exception

@@ -111,7 +111,7 @@ async def test_notion_callback(app, mock_bot):
 
 
 @pytest.mark.asyncio
-async def test_callback_error(app, mock_bot):
+async def test_google_callback_error(app, mock_bot):
     mock_bot.google_service.exchange_code.side_effect = Exception("Exchange failed")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -119,3 +119,37 @@ async def test_callback_error(app, mock_bot):
         response = await ac.get("/auth/google/callback?code=abc&state=123")
         assert response.status_code == 400
         assert "Exchange failed" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_github_callback_error(app, mock_bot):
+    mock_bot.github_service.exchange_code.side_effect = Exception("GH Exchange failed")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/auth/github/callback?code=abc&state=123")
+        assert response.status_code == 400
+        assert "GH Exchange failed" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_notion_callback_error(app, mock_bot):
+    mock_bot.notion_service.exchange_code.side_effect = Exception(
+        "Notion Exchange failed"
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/auth/notion/callback?code=abc&state=123")
+        assert response.status_code == 400
+        assert "Notion Exchange failed" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_health_check(app):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/health")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}

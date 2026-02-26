@@ -69,7 +69,7 @@ async def test_trigger_task(bot):
     payload = {"pending_reflections": ["some context"]}
 
     mock_user = AsyncMock(spec=User)
-    mock_user.__str__.return_value = "test_user#1234"
+    mock_user.__str__ = MagicMock(return_value="test_user#1234")
     mock_dm = AsyncMock(spec=DMChannel)
     mock_user.create_dm.return_value = mock_dm
 
@@ -170,3 +170,132 @@ async def test_on_message_calls_handle_dm(bot):
     with patch("panager.discord.bot.handle_dm", new_callable=AsyncMock) as mock_handle:
         await bot.on_message(mock_message)
         mock_handle.assert_awaited_once_with(mock_message, bot.graph)
+
+
+@pytest.mark.asyncio
+async def test_pending_messages_property(bot):
+    """Verify pending_messages property."""
+    bot._pending_messages = {123: "hello"}
+    assert bot.pending_messages == {123: "hello"}
+
+
+@pytest.mark.asyncio
+async def test_get_user_timezone(bot):
+    """Verify get_user_timezone."""
+    assert await bot.get_user_timezone(123) == "Asia/Seoul"
+
+
+@pytest.mark.asyncio
+async def test_send_notification_error(bot):
+    """Verify send_notification logs exception on error."""
+    bot.fetch_user = AsyncMock(side_effect=Exception("Fetch failed"))
+    with patch("panager.discord.bot.log") as mock_log:
+        await bot.send_notification(123, "msg")
+        mock_log.exception.assert_called_with("알림 발송 실패 (user_id=%d)", 123)
+
+
+@pytest.mark.asyncio
+async def test_trigger_task_no_graph(bot):
+    """Verify trigger_task returns if graph is None."""
+    bot.graph = None
+    with patch("panager.discord.bot.log") as mock_log:
+        await bot.trigger_task(123, "cmd")
+        mock_log.error.assert_called_with("에이전트 그래프가 주입되지 않았습니다.")
+
+
+@pytest.mark.asyncio
+async def test_trigger_task_error(bot):
+    """Verify trigger_task logs exception on error."""
+    bot.fetch_user = AsyncMock(side_effect=Exception("Trigger failed"))
+    with patch("panager.discord.bot.log") as mock_log:
+        await bot.trigger_task(123, "cmd")
+        mock_log.exception.assert_called_with("태스크 트리거 실패 (user_id=%d)", 123)
+
+
+@pytest.mark.asyncio
+async def test_setup_hook(bot):
+    """Verify setup_hook creates background task."""
+    with patch("asyncio.create_task") as mock_create:
+        await bot.setup_hook()
+        mock_create.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_process_auth_queue_skip(bot):
+    """Verify _process_auth_queue skips if no pending message or graph."""
+    # Case 1: no pending message
+    await bot.auth_complete_queue.put({"user_id": 999})
+    # Case 2: no graph
+    bot._pending_messages[888] = "msg"
+    bot.graph = None
+    await bot.auth_complete_queue.put({"user_id": 888})
+
+    bot.auth_complete_queue.get = AsyncMock(
+        side_effect=[{"user_id": 999}, {"user_id": 888}, asyncio.CancelledError()]
+    )
+
+    with patch(
+        "panager.discord.bot._stream_agent_response", new_callable=AsyncMock
+    ) as mock_stream:
+        try:
+            await bot._process_auth_queue()
+        except asyncio.CancelledError:
+            pass
+        mock_stream.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_auth_queue_error(bot):
+    """Verify _process_auth_queue logs exception on error."""
+    user_id = 123
+    bot._pending_messages[user_id] = "msg"
+    bot.fetch_user = AsyncMock(side_effect=Exception("Process failed"))
+
+    bot.auth_complete_queue.get = AsyncMock(
+        side_effect=[{"user_id": user_id}, asyncio.CancelledError()]
+    )
+
+    with patch("panager.discord.bot.log") as mock_log:
+        try:
+            await bot._process_auth_queue()
+        except asyncio.CancelledError:
+            pass
+        mock_log.exception.assert_called_with(
+            "인증 후 재실행 실패 (user_id=%d)", user_id
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_ready(bot):
+    """Verify on_ready logging."""
+    with (
+        patch.object(PanagerBot, "user", "bot#1234"),
+        patch("panager.discord.bot.log") as mock_log,
+    ):
+        await bot.on_ready()
+        mock_log.info.assert_called_with("봇 로그인 완료: %s", "bot#1234")
+
+
+@pytest.mark.asyncio
+async def test_on_message_no_graph(bot):
+    """Verify on_message handles missing graph."""
+    bot.graph = None
+    mock_message = MagicMock(spec=Message)
+    mock_message.author.bot = False
+    mock_message.channel = MagicMock(spec=DMChannel)
+    mock_message.channel.send = AsyncMock()
+
+    with patch("panager.discord.bot.log") as mock_log:
+        await bot.on_message(mock_message)
+        mock_log.error.assert_called_with("에이전트 그래프가 주입되지 않았습니다.")
+        mock_message.channel.send.assert_awaited_once_with(
+            "시스템 준비 중입니다. 잠시 후 다시 시도해주세요."
+        )
+
+
+@pytest.mark.asyncio
+async def test_close(bot):
+    """Verify close calls super().close()."""
+    with patch("discord.Client.close", new_callable=AsyncMock) as mock_super_close:
+        await bot.close()
+        mock_super_close.assert_awaited_once()
