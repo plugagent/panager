@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import functools
-import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, NotRequired, Any
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, AnyMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
-from panager.agent.state import AgentState
-from panager.agent.supervisor import supervisor_node
+from panager.agent.state import AgentState, DiscoveredTool, FunctionSchema
+from panager.agent.agent import agent_node
 from panager.core.config import Settings
 from panager.agent.registry import ToolRegistry
 from panager.core.exceptions import (
@@ -33,7 +32,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def auth_interrupt_node(state: AgentState):
+class AuthInterruptOutput(TypedDict):
+    """Output for the auth_interrupt node."""
+
+    auth_request_url: None
+
+
+def auth_interrupt_node(state: AgentState) -> AuthInterruptOutput:
     """단순하게 인터럽트를 발생시키고 사용자 인증 후의 데이터를 반환합니다."""
     auth_url = state.get("auth_request_url")
     provider = "service"
@@ -52,36 +57,44 @@ def auth_interrupt_node(state: AgentState):
     return {"auth_request_url": None}
 
 
-async def discovery_node(state: AgentState, registry: ToolRegistry) -> dict:
+async def discovery_node(
+    state: AgentState, registry: ToolRegistry
+) -> dict[str, list[DiscoveredTool]]:
     """사용자 메시지를 기반으로 관련 도구를 검색합니다."""
     last_msg = state["messages"][-1]
     if not isinstance(last_msg, HumanMessage) or not last_msg.content:
-        return {}
+        return {"discovered_tools": []}
 
     query = str(last_msg.content)
     clean_query = query.replace("[SCHEDULED_EVENT]", "").strip()
 
     tools = await registry.search_tools(clean_query, limit=10)
-    discovered = []
+    discovered: list[DiscoveredTool] = []
     for t in tools:
         # BaseTool.args는 이미 유효한 OpenAI parameters 형태의 dict를 반환합니다.
-        # (type='object'와 properties가 포함된 스키마)
         schema = t.args if hasattr(t, "args") else {"type": "object", "properties": {}}
 
-        # OpenAI function calling 규격에 맞게 변환
+        # OpenAI function calling 규격에 맞게 변환하여 strict하게 생성
         discovered.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": schema,
-                },
-                "domain": (t.metadata.get("domain") if t.metadata else "unknown"),
-            }
+            DiscoveredTool(
+                type="function",
+                function=FunctionSchema(
+                    name=t.name,
+                    description=t.description,
+                    parameters=schema,
+                ),
+                domain=(t.metadata.get("domain") if t.metadata else "unknown"),
+            )
         )
 
     return {"discovered_tools": discovered}
+
+
+class ToolExecutorOutput(TypedDict):
+    """Output for the tool_executor node."""
+
+    messages: list[AnyMessage]
+    auth_request_url: NotRequired[str | None]
 
 
 async def tool_executor_node(
@@ -90,13 +103,13 @@ async def tool_executor_node(
     google_service: GoogleService,
     github_service: GithubService,
     notion_service: NotionService,
-) -> dict:
+) -> ToolExecutorOutput:
     """도구를 직접 실행하고 결과를 반환합니다. 인증이 필요한 경우 인터럽트를 발생시킵니다."""
     user_id = state["user_id"]
     last_message = state["messages"][-1]
 
     if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-        return {}
+        return {"messages": []}
 
     user_tools = await registry.get_tools_for_user(
         user_id,
@@ -106,8 +119,8 @@ async def tool_executor_node(
     )
     tool_map = {t.name: t for t in user_tools}
 
-    tool_messages = []
-    auth_url = None
+    tool_messages: list[AnyMessage] = []
+    auth_url: str | None = None
     target_tool = None
 
     for tool_call in last_message.tool_calls:
@@ -159,7 +172,7 @@ async def tool_executor_node(
             )
             break
 
-    res: dict = {"messages": tool_messages}
+    res: ToolExecutorOutput = {"messages": tool_messages}
     if auth_url:
         res["auth_request_url"] = auth_url
 
@@ -182,9 +195,9 @@ def build_graph(
 
     graph.add_node("discovery", functools.partial(discovery_node, registry=registry))
     graph.add_node(
-        "supervisor",
+        "agent",
         functools.partial(
-            supervisor_node, settings=settings, session_provider=session_provider
+            agent_node, settings=settings, session_provider=session_provider
         ),
     )
     graph.add_node("auth_interrupt", auth_interrupt_node)
@@ -200,7 +213,7 @@ def build_graph(
     )
 
     graph.add_edge(START, "discovery")
-    graph.add_edge("discovery", "supervisor")
+    graph.add_edge("discovery", "agent")
 
     def _route(state: AgentState) -> str:
         last_message = state["messages"][-1]
@@ -211,17 +224,16 @@ def build_graph(
         if next_worker == "FINISH" or not next_worker:
             return END
 
-        # 레거시 워커는 이제 개별 노드로 존재하지 않으므로 END로 처리하거나
-        # 필요한 경우 다시 supervisor로 보낼 수 있음.
-        # 여기서는 FINISH가 아니면 일단 END로 안전하게 처리
+        # 에이전트가 종료되지 않았으면 다시 discovery(또는 바로 agent)로 보낼 수 있지만
+        # 보통은 도구 호출이 없으면 종료하는 것이 안전
         return END
 
-    graph.add_conditional_edges("supervisor", _route)
+    graph.add_conditional_edges("agent", _route)
 
     def _after_tool_executor(state: AgentState) -> str:
         if state.get("auth_request_url"):
             return "auth_interrupt"
-        return "supervisor"
+        return "agent"
 
     graph.add_conditional_edges("tool_executor", _after_tool_executor)
     graph.add_conditional_edges("auth_interrupt", _after_tool_executor)

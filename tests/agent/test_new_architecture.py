@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 from panager.agent.registry import ToolRegistry
 from panager.core.config import Settings
 from langchain_core.tools import tool
+from panager.agent.state import DiscoveredTool
 
 
 @pytest.fixture
@@ -14,7 +15,6 @@ def mock_pool():
 
 @pytest.fixture
 def settings():
-    # settings = Settings() # requires env
     settings = MagicMock(spec=Settings)
     return settings
 
@@ -28,7 +28,7 @@ async def test_tool_registry_indexing_and_searching(mock_pool, settings):
         """This is a tool for testing the registry."""
         return arg1
 
-    # Manually add metadata since @tool(metadata=...) might not be supported in this version
+    # Manually add metadata
     my_test_tool.metadata = {"domain": "test"}
 
     registry.register_tools([my_test_tool])
@@ -73,8 +73,10 @@ async def test_discovery_node_updates_state(mock_pool, settings):
     result = await discovery_node(state, registry)
 
     assert "discovered_tools" in result
-    assert result["discovered_tools"][0]["function"]["name"] == "found_tool"
-    assert result["discovered_tools"][0]["domain"] == "test"
+    tool_info = result["discovered_tools"][0]
+    assert isinstance(tool_info, DiscoveredTool)
+    assert tool_info.function.name == "found_tool"
+    assert tool_info.domain == "test"
 
 
 @pytest.mark.asyncio

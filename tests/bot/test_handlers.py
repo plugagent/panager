@@ -8,18 +8,18 @@ async def _make_fake_stream(*chunks: str):
     """updates와 messages 이벤트를 혼합하여 yield하는 가짜 astream."""
     # 1. Discovery 시작 (updates)
     yield ("updates", {"discovery": {"discovered_tools": []}})
-    # 2. Supervisor 시작
-    yield ("updates", {"supervisor": {"messages": []}})
+    # 2. Agent 시작
+    yield ("updates", {"agent": {"messages": []}})
 
     # 3. 메시지 스트리밍
     for text in chunks:
         yield (
             "messages",
-            (AIMessageChunk(content=text), {"langgraph_node": "supervisor"}),
+            (AIMessageChunk(content=text), {"langgraph_node": "agent"}),
         )
 
     # 4. 종료 또는 도구 실행 (여기서는 종료 시뮬레이션)
-    yield ("updates", {"supervisor": {"next_worker": "FINISH"}})
+    yield ("updates", {"agent": {"next_worker": "FINISH"}})
 
 
 def _setup_mock_graph():
@@ -99,8 +99,12 @@ async def test_stream_sends_initial_message():
 
     await _stream_agent_response(mock_graph, state, config, mock_channel)
 
-    # 초기 메시지 전송 확인
-    mock_channel.send.assert_called_with("생각하는 중...")
+    # 초기 메시지 전송 확인 (상태 업데이트가 즉시 발생하므로 discovery 상태가 포함될 수 있음)
+    # 실제로는 _render가 호출되면서 현재 상태가 반영됨
+    # Exact match보다는 호출 여부를 확인하거나 유연하게 체크
+    mock_channel.send.assert_called()
+    first_call_args = mock_channel.send.call_args[0][0]
+    assert "의도를 파악하고 있습니다" in first_call_args
 
 
 @pytest.mark.asyncio

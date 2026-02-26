@@ -11,6 +11,12 @@ from sentence_transformers import SentenceTransformer
 
 if TYPE_CHECKING:
     from panager.core.config import Settings
+    from panager.services.google import GoogleService
+    from panager.services.github import GithubService
+    from panager.services.notion import NotionService
+    from panager.services.memory import MemoryService
+    from panager.services.scheduler import SchedulerService
+
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +28,6 @@ class ToolRegistry:
         self._pool = pool
         self._settings = settings
         self._tools: dict[str, BaseTool] = {}
-        self._tool_factories: dict[str, Any] = {}
         self._model: SentenceTransformer | None = None
         self._lock = asyncio.Lock()
 
@@ -91,49 +96,51 @@ class ToolRegistry:
                 )
         log.info("ToolRegistry: 도구 동기화 완료.")
 
-    async def get_tools_for_user(self, user_id: int, **services: Any) -> list[BaseTool]:
+    async def get_tools_for_user(
+        self,
+        user_id: int,
+        google_service: GoogleService | None = None,
+        github_service: GithubService | None = None,
+        notion_service: NotionService | None = None,
+        memory_service: MemoryService | None = None,
+        scheduler_service: SchedulerService | None = None,
+    ) -> list[BaseTool]:
         """특정 사용자에 대해 모든 등록된 도구 인스턴스를 생성하여 반환합니다."""
-        all_tools = []
+        all_tools: list[BaseTool] = []
 
         # 1. Google Tools
-        if "google_service" in services:
+        if google_service:
             from panager.tools.google import (
                 make_manage_google_calendar,
                 make_manage_google_tasks,
             )
 
-            all_tools.append(
-                make_manage_google_calendar(user_id, services["google_service"])
-            )
-            all_tools.append(
-                make_manage_google_tasks(user_id, services["google_service"])
-            )
+            all_tools.append(make_manage_google_calendar(user_id, google_service))
+            all_tools.append(make_manage_google_tasks(user_id, google_service))
 
         # 2. GitHub Tools
-        if "github_service" in services:
+        if github_service:
             from panager.tools.github import make_github_tools
 
-            all_tools.extend(make_github_tools(user_id, services["github_service"]))
+            all_tools.extend(make_github_tools(user_id, github_service))
 
         # 3. Notion Tools
-        if "notion_service" in services:
+        if notion_service:
             from panager.tools.notion import make_notion_tools
 
-            all_tools.extend(make_notion_tools(user_id, services["notion_service"]))
+            all_tools.extend(make_notion_tools(user_id, notion_service))
 
         # 4. Memory Tools
-        if "memory_service" in services:
+        if memory_service:
             from panager.tools.memory import make_memory_tools
 
-            all_tools.extend(make_memory_tools(user_id, services["memory_service"]))
+            all_tools.extend(make_memory_tools(user_id, memory_service))
 
         # 5. Scheduler Tools
-        if "scheduler_service" in services:
+        if scheduler_service:
             from panager.tools.scheduler import make_scheduler_tools
 
-            all_tools.extend(
-                make_scheduler_tools(user_id, services["scheduler_service"])
-            )
+            all_tools.extend(make_scheduler_tools(user_id, scheduler_service))
 
         return all_tools
 

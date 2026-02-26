@@ -35,7 +35,7 @@ class ResponseManager:
         """실행 단계에 따른 상태 문구를 업데이트합니다."""
         status_map = {
             "discovery": "의도를 파악하고 있습니다...",
-            "supervisor": "관련 도구를 검색하고 계획을 세우는 중입니다...",
+            "agent": "관련 도구를 검색하고 계획을 세우는 중입니다...",
             "tool_executor": "도구 실행 중",
             "auth_interrupt": "보안 인증이 필요합니다.",
         }
@@ -136,8 +136,8 @@ async def _stream_agent_response(
 
                 # 다음 노드를 위한 정보 추출
                 tool_name = None
-                if node_name == "supervisor":
-                    # supervisor가 도구를 호출하기로 했다면 마지막 메시지에서 이름 추출
+                if node_name == "agent":
+                    # agent가 도구를 호출하기로 했다면 마지막 메시지에서 이름 추출
                     if "messages" in node_output and node_output["messages"]:
                         last_ai_msg = node_output["messages"][-1]
                         if (
@@ -155,10 +155,8 @@ async def _stream_agent_response(
                     msg_chunk.content, str
                 ):
                     if msg_chunk.content:
-                        # 텍스트가 오는 시점은 보통 supervisor 노드
-                        await ui.update_status(
-                            metadata.get("langgraph_node", "supervisor")
-                        )
+                        # 텍스트가 오는 시점은 보통 agent 노드
+                        await ui.update_status(metadata.get("langgraph_node", "agent"))
                         await ui.append_text(msg_chunk.content)
 
     except Exception as e:
