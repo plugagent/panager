@@ -146,18 +146,24 @@ async def tool_executor_node(
             )
         except (GoogleAuthRequired, GithubAuthRequired, NotionAuthRequired):
             # 도메인별 서비스에서 인증 URL 획득
-            if tool_call["name"] in [
-                "manage_google_calendar",
-                "manage_google_tasks",
-            ] or (tool.metadata and tool.metadata.get("domain") == "google"):
+            tool_domain = (
+                tool.metadata.get("domain")
+                if tool and hasattr(tool, "metadata") and tool.metadata
+                else None
+            )
+
+            if (
+                tool_call["name"]
+                in [
+                    "manage_google_calendar",
+                    "manage_google_tasks",
+                ]
+                or tool_domain == "google"
+            ):
                 auth_url = google_service.get_auth_url(user_id)
-            elif "github" in tool_call["name"] or (
-                tool.metadata and tool.metadata.get("domain") == "github"
-            ):
+            elif "github" in tool_call["name"] or tool_domain == "github":
                 auth_url = github_service.get_auth_url(user_id)
-            elif "notion" in tool_call["name"] or (
-                tool.metadata and tool.metadata.get("domain") == "notion"
-            ):
+            elif "notion" in tool_call["name"] or tool_domain == "github":
                 auth_url = notion_service.get_auth_url(user_id)
 
             tool_messages.append(

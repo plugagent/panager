@@ -83,18 +83,26 @@ async def _stream_agent_response(
             if task.interrupts:
                 # 첫 번째 인터럽트 정보 추출
                 info = task.interrupts[0]
-                if isinstance(info, dict) and info.get("type") in [
-                    "google_auth_required",
-                    "github_auth_required",
-                    "notion_auth_required",
-                ]:
+                if isinstance(info, dict):
+                    int_type = info.get("type")
                     auth_url = info.get("url")
-                    provider = info.get("type").split("_")[0].capitalize()
 
-                    auth_msg = await channel.send(
-                        f"🔑 **{provider} 인증이 필요합니다.**\n"
-                        f"아래 링크를 통해 인증을 완료해주세요:\n{auth_url}"
-                    )
+                    if (
+                        int_type
+                        and auth_url
+                        and int_type
+                        in [
+                            "google_auth_required",
+                            "github_auth_required",
+                            "notion_auth_required",
+                        ]
+                    ):
+                        provider = str(int_type).split("_")[0].capitalize()
+
+                        auth_msg = await channel.send(
+                            f"🔑 **{provider} 인증이 필요합니다.**\n"
+                            f"아래 링크를 통해 인증을 완료해주세요:\n{auth_url}"
+                        )
 
                     # 인증 메시지 ID를 상태에 저장하여 나중에 정리할 수 있게 함
                     await graph.update_state(
