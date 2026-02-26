@@ -121,3 +121,42 @@ async def test_restore_schedules_integration(db_pool):
     messages = [c[1]["args"][2] for c in calls]
     assert "msg1" in messages
     assert "msg2" in messages
+
+
+@pytest.mark.asyncio
+async def test_cancel_schedule_integration(db_pool):
+    """스케줄 취소 시뮬레이션."""
+    mock_provider = MagicMock()
+    scheduler = SchedulerService(pool=db_pool, notification_provider=mock_provider)
+
+    # scheduler._scheduler를 Mock으로 교체
+    mock_apscheduler = MagicMock()
+    scheduler._scheduler = mock_apscheduler
+
+    user_id = 997
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO users (user_id, username) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            user_id,
+            "test_user_cancel",
+        )
+
+    # 1. 스케줄 추가
+    trigger_at = datetime.now(timezone.utc) + timedelta(days=1)
+    schedule_id = await scheduler.add_schedule(
+        user_id=user_id, message="to be cancelled", trigger_at=trigger_at
+    )
+
+    # 2. 취소
+    success = await scheduler.cancel_schedule(user_id, str(schedule_id))
+    assert success is True
+
+    # 3. DB 확인 (삭제되었는지)
+    async with db_pool.acquire() as conn:
+        count = await conn.fetchval(
+            "SELECT count(*) FROM schedules WHERE id = $1", schedule_id
+        )
+        assert count == 0
+
+    # 4. 스케줄러 확인 (remove_job 호출되었는지)
+    mock_apscheduler.remove_job.assert_called_once_with(str(schedule_id))
