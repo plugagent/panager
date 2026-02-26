@@ -13,8 +13,9 @@ from panager.services.memory import MemoryService
 
 @pytest.fixture(autouse=True)
 async def setup_db():
+    port = os.environ.get("POSTGRES_PORT", "5432")
     dsn = os.environ.get(
-        "TEST_DATABASE_URL", "postgresql://panager:panager@localhost:5432/panager"
+        "TEST_DATABASE_URL", f"postgresql://panager:panager@localhost:{port}/panager"
     )
     await init_pool(dsn)
 

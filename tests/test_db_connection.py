@@ -5,8 +5,9 @@ import pytest
 async def test_init_and_close_pool():
     import os
 
+    port = os.environ.get("POSTGRES_PORT", "5432")
     dsn = os.environ.get(
-        "TEST_DATABASE_URL", "postgresql://panager:panager@localhost:5432/panager"
+        "TEST_DATABASE_URL", f"postgresql://panager:panager@localhost:{port}/panager"
     )
     from panager.db.connection import init_pool, close_pool, get_pool
 

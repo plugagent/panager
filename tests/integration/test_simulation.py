@@ -14,8 +14,9 @@ from panager.db.connection import init_pool, close_pool, get_pool
 
 @pytest.fixture
 async def db_pool() -> AsyncGenerator[asyncpg.Pool, None]:
+    port = os.environ.get("POSTGRES_PORT", "5432")
     dsn = os.environ.get(
-        "TEST_DATABASE_URL", "postgresql://panager:panager@localhost:5432/panager"
+        "TEST_DATABASE_URL", f"postgresql://panager:panager@localhost:{port}/panager"
     )
     await init_pool(dsn)
     pool = get_pool()
