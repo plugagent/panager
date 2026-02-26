@@ -32,10 +32,11 @@ jobs:
           POSTGRES_USER: panager
           POSTGRES_PASSWORD: panager
           POSTGRES_DB: panager
+          PGPORT: ${{ vars.POSTGRES_PORT || 5432 }}
         ports:
-          - 5432:5432
+          - ${{ vars.POSTGRES_PORT || 5432 }}:${{ vars.POSTGRES_PORT || 5432 }}
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -p ${{ vars.POSTGRES_PORT || 5432 }}"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -51,7 +52,7 @@ jobs:
       - name: Run migrations
         env:
           POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
+          POSTGRES_PORT: ${{ vars.POSTGRES_PORT || 5432 }}
           POSTGRES_USER: panager
           POSTGRES_PASSWORD: panager
           POSTGRES_DB: panager
@@ -59,7 +60,7 @@ jobs:
       - name: Run tests
         env:
           POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
+          POSTGRES_PORT: ${{ vars.POSTGRES_PORT || 5432 }}
           POSTGRES_USER: panager
           POSTGRES_PASSWORD: panager
           POSTGRES_DB: panager
