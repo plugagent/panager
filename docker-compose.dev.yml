@@ -14,9 +14,6 @@ services:
       target: dev
     command: alembic upgrade head
     env_file: .env
-    environment:
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
     depends_on:
       db:
         condition: service_healthy
@@ -28,9 +25,6 @@ services:
       target: dev
     command: uv run watchfiles "python -m panager.main" src
     env_file: .env
-    environment:
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
     ports:
       - "${PORT:-8000}:8000"
     volumes:
@@ -49,7 +43,6 @@ services:
     image: pgvector/pgvector:pg16
     env_file: .env
     environment:
-      - POSTGRES_HOST=db
       - PGPORT=${POSTGRES_PORT:-5432}
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
