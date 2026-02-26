@@ -34,7 +34,7 @@ class SearchNotionInput(BaseModel):
 
 
 def make_notion_tools(user_id: int, notion_service: NotionService) -> list[BaseTool]:
-    @tool(args_schema=SearchNotionInput, metadata={"domain": "notion"})
+    @tool(args_schema=SearchNotionInput)
     async def search_notion(
         query: str | None = None, filter_type: str | None = None
     ) -> str:
@@ -67,7 +67,7 @@ def make_notion_tools(user_id: int, notion_service: NotionService) -> list[BaseT
 
         return json.dumps({"status": "success", "results": results}, ensure_ascii=False)
 
-    @tool(args_schema=CreateNotionPageInput, metadata={"domain": "notion"})
+    @tool(args_schema=CreateNotionPageInput)
     async def create_notion_page(
         database_id: str,
         properties: dict[str, Any],
@@ -93,4 +93,6 @@ def make_notion_tools(user_id: int, notion_service: NotionService) -> list[BaseT
             ensure_ascii=False,
         )
 
+    search_notion.metadata = {"domain": "notion"}
+    create_notion_page.metadata = {"domain": "notion"}
     return [search_notion, create_notion_page]

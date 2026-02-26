@@ -78,7 +78,7 @@ class CalendarToolInput(BaseModel):
 
 
 def make_manage_google_tasks(user_id: int, google_service: GoogleService) -> BaseTool:
-    @tool(args_schema=TaskToolInput, metadata={"domain": "google"})
+    @tool(args_schema=TaskToolInput)
     async def manage_google_tasks(
         action: TaskAction,
         task_id: str | None = None,
@@ -136,13 +136,14 @@ def make_manage_google_tasks(user_id: int, google_service: GoogleService) -> Bas
 
         raise ValueError(f"지원하지 않는 액션입니다: {action}")
 
+    manage_google_tasks.metadata = {"domain": "google"}
     return manage_google_tasks
 
 
 def make_manage_google_calendar(
     user_id: int, google_service: GoogleService
 ) -> BaseTool:
-    @tool(args_schema=CalendarToolInput, metadata={"domain": "google"})
+    @tool(args_schema=CalendarToolInput)
     async def manage_google_calendar(
         action: CalendarAction,
         event_id: str | None = None,
@@ -231,4 +232,5 @@ def make_manage_google_calendar(
 
         raise ValueError(f"지원하지 않는 액션입니다: {action}")
 
+    manage_google_calendar.metadata = {"domain": "google"}
     return manage_google_calendar

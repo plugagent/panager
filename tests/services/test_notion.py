@@ -3,8 +3,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import httpx
-from notion_client import AsyncClient
 from panager.core.exceptions import NotionAuthRequired
 from panager.services.notion import NotionService, NotionTokens
 

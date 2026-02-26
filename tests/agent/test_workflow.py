@@ -24,6 +24,7 @@ def mock_services():
         "github_service": MagicMock(),
         "notion_service": MagicMock(),
         "scheduler_service": MagicMock(),
+        "registry": MagicMock(),
     }
 
 
@@ -40,6 +41,7 @@ async def test_graph_builds_successfully(mock_services, mock_settings):
             mock_services["github_service"],
             mock_services["notion_service"],
             mock_services["scheduler_service"],
+            mock_services["registry"],
         )
         assert graph is not None
 
@@ -51,7 +53,7 @@ async def test_graph_processes_message(mock_services, mock_settings):
     mock_llm_response = AIMessage(content="안녕하세요!")
 
     with (
-        patch("panager.agent.workflow.get_llm") as mock_get_llm,
+        patch("panager.agent.supervisor.get_llm") as mock_get_llm,
         patch("panager.agent.workflow.Settings", return_value=mock_settings),
     ):
         mock_llm = MagicMock()
@@ -69,6 +71,7 @@ async def test_graph_processes_message(mock_services, mock_settings):
             mock_services["github_service"],
             mock_services["notion_service"],
             mock_services["scheduler_service"],
+            mock_services["registry"],
         )
         assert graph is not None
 
@@ -80,8 +83,6 @@ async def test_agent_node_system_prompt_contains_date_and_timezone(
     """supervisor_node가 system prompt에 현재 연도와 timezone을 포함하는지 검증."""
     from datetime import datetime
     import zoneinfo
-    from langchain_core.messages import SystemMessage
-    from panager.agent.state import Route
 
     captured_messages = []
     mock_llm_response = AIMessage(content='{"next_worker": "FINISH"}')
@@ -133,8 +134,6 @@ async def test_agent_node_invalid_timezone_falls_back_to_seoul(
     mock_services, mock_settings
 ):
     """유효하지 않은 timezone이 주어졌을 때 Asia/Seoul로 폴백하는지 검증."""
-    from panager.agent.state import Route
-    from langchain_core.messages import SystemMessage
 
     captured_messages = []
     mock_llm_response = AIMessage(content='{"next_worker": "FINISH"}')
@@ -274,9 +273,7 @@ async def test_agent_node_calls_trim_messages_with_correct_args(
 @pytest.mark.asyncio
 async def test_agent_node_system_trigger_adds_instruction(mock_services, mock_settings):
     """is_system_trigger가 True일 때 시스템 프롬프트에 지시어가 추가되는지 검증."""
-    from panager.agent.state import Route
     from panager.agent.supervisor import supervisor_node
-    from langchain_core.messages import SystemMessage
 
     captured_messages = []
     mock_llm_response = AIMessage(content='{"next_worker": "FINISH"}')

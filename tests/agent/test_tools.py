@@ -1,14 +1,14 @@
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from panager.agent.google.tools import (
+from panager.tools.google import (
     CalendarAction,
     TaskAction,
     make_manage_google_calendar,
     make_manage_google_tasks,
 )
-from panager.agent.memory.tools import MemoryAction, make_manage_user_memory
-from panager.agent.scheduler.tools import ScheduleAction, make_manage_dm_scheduler
+from panager.tools.memory import MemoryAction, make_manage_user_memory
+from panager.tools.scheduler import ScheduleAction, make_manage_dm_scheduler
 
 
 @pytest.fixture

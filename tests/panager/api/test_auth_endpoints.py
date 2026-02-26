@@ -1,7 +1,6 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from panager.api.main import create_app
 

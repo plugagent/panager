@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
@@ -11,7 +11,6 @@ from langgraph.types import interrupt
 
 from panager.agent.state import AgentState
 from panager.agent.supervisor import supervisor_node
-from panager.agent.utils import get_llm
 from panager.core.config import Settings
 from panager.agent.registry import ToolRegistry
 from panager.core.exceptions import (
@@ -35,40 +34,22 @@ log = logging.getLogger(__name__)
 
 
 def auth_interrupt_node(state: AgentState):
-    """인증이 필요한 경우 실행을 일시 중단하고 사용자 승인을 기다립니다."""
+    """단순하게 인터럽트를 발생시키고 사용자 인증 후의 데이터를 반환합니다."""
     auth_url = state.get("auth_request_url")
-    current_worker = state.get("next_worker")
-
+    provider = "service"
     if auth_url:
-        provider = "google"
-        if "github.com" in auth_url:
+        if "github" in auth_url:
             provider = "github"
-        elif "notion.so" in auth_url or "api.notion.com" in auth_url:
+        elif "notion" in auth_url:
             provider = "notion"
+        elif "google" in auth_url:
+            provider = "google"
 
-        resume_data = interrupt({"type": f"{provider}_auth_required", "url": auth_url})
+    # LangGraph 인터럽트 발생
+    interrupt({"type": f"{provider}_auth_required", "url": auth_url})
 
-        is_success = False
-        if resume_data == "auth_success":
-            is_success = True
-        elif (
-            isinstance(resume_data, dict)
-            and resume_data.get("status") == "auth_success"
-        ):
-            is_success = True
-
-        if is_success:
-            return {
-                "auth_request_url": None,
-                "auth_message_id": None,
-                "next_worker": current_worker,
-            }
-
-        return {
-            "auth_request_url": None,
-            "next_worker": "FINISH",
-        }
-    return {}
+    # 인증 완료 후 돌아오면 URL 정보 제거
+    return {"auth_request_url": None}
 
 
 async def discovery_node(state: AgentState, registry: ToolRegistry) -> dict:
@@ -83,19 +64,19 @@ async def discovery_node(state: AgentState, registry: ToolRegistry) -> dict:
     tools = await registry.search_tools(clean_query, limit=10)
     discovered = []
     for t in tools:
-        schema = {}
-        if (
-            hasattr(t, "args_schema")
-            and t.args_schema
-            and hasattr(t.args_schema, "schema")
-        ):
-            schema = t.args_schema.schema()
+        # BaseTool.args는 이미 유효한 OpenAI parameters 형태의 dict를 반환합니다.
+        # (type='object'와 properties가 포함된 스키마)
+        schema = t.args if hasattr(t, "args") else {"type": "object", "properties": {}}
 
+        # OpenAI function calling 규격에 맞게 변환
         discovered.append(
             {
-                "name": t.name,
-                "description": t.description,
-                "schema": schema,
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": schema,
+                },
                 "domain": (t.metadata.get("domain") if t.metadata else "unknown"),
             }
         )
@@ -127,6 +108,7 @@ async def tool_executor_node(
 
     tool_messages = []
     auth_url = None
+    target_tool = None
 
     for tool_call in last_message.tool_calls:
         try:
@@ -140,17 +122,20 @@ async def tool_executor_node(
                 )
                 continue
 
+            target_tool = tool
             result = await tool.ainvoke(tool_call["args"])
             tool_messages.append(
                 ToolMessage(content=str(result), tool_call_id=tool_call["id"])
             )
         except (GoogleAuthRequired, GithubAuthRequired, NotionAuthRequired):
             # 도메인별 서비스에서 인증 URL 획득
-            tool_domain = (
-                tool.metadata.get("domain")
-                if tool and hasattr(tool, "metadata") and tool.metadata
-                else None
-            )
+            tool_domain = None
+            if (
+                target_tool
+                and hasattr(target_tool, "metadata")
+                and target_tool.metadata
+            ):
+                tool_domain = target_tool.metadata.get("domain")
 
             if (
                 tool_call["name"]
@@ -163,15 +148,12 @@ async def tool_executor_node(
                 auth_url = google_service.get_auth_url(user_id)
             elif "github" in tool_call["name"] or tool_domain == "github":
                 auth_url = github_service.get_auth_url(user_id)
-            elif "notion" in tool_call["name"] or tool_domain == "github":
+            elif "notion" in tool_call["name"] or tool_domain == "notion":
                 auth_url = notion_service.get_auth_url(user_id)
 
             tool_messages.append(
                 ToolMessage(
-                    content=json.dumps(
-                        {"status": "error", "message": "Authentication required"},
-                        ensure_ascii=False,
-                    ),
+                    content="Authentication required. Please check the link.",
                     tool_call_id=tool_call["id"],
                 )
             )

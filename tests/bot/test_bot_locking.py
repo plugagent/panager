@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import discord
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,18 +16,19 @@ def mock_services():
         "github": MagicMock(),
         "notion": MagicMock(),
         "scheduler": MagicMock(),
+        "registry": MagicMock(),
     }
 
 
 @pytest.mark.asyncio
 async def test_bot_lock_prevents_concurrent_access(mock_services):
-    """동일 사용자에 대해 여러 메시지가 동시에 올 때 순차적으로 처리되는지 확인."""
     bot = PanagerBot(
         memory_service=mock_services["memory"],
         google_service=mock_services["google"],
         github_service=mock_services["github"],
         notion_service=mock_services["notion"],
         scheduler_service=mock_services["scheduler"],
+        registry=mock_services["registry"],
     )
     bot.graph = MagicMock()
 
@@ -75,6 +77,7 @@ async def test_bot_trigger_task_uses_lock(mock_services):
         github_service=mock_services["github"],
         notion_service=mock_services["notion"],
         scheduler_service=mock_services["scheduler"],
+        registry=mock_services["registry"],
     )
     bot.graph = MagicMock()
 
@@ -117,6 +120,3 @@ async def test_bot_trigger_task_uses_lock(mock_services):
     assert execution_order[1].startswith("end")
     assert execution_order[2].startswith("start")
     assert execution_order[3].startswith("end")
-
-
-import discord  # Ensure discord is imported for MagicMock(spec=discord.DMChannel)

@@ -73,7 +73,7 @@ async def test_discovery_node_updates_state(mock_pool, settings):
     result = await discovery_node(state, registry)
 
     assert "discovered_tools" in result
-    assert result["discovered_tools"][0]["name"] == "found_tool"
+    assert result["discovered_tools"][0]["function"]["name"] == "found_tool"
     assert result["discovered_tools"][0]["domain"] == "test"
 
 

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import ValidationError
 
-from panager.agent.google.tools import (
+from panager.tools.google import (
     CalendarAction,
     TaskAction,
     make_manage_google_calendar,

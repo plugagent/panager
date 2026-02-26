@@ -122,14 +122,18 @@ class ToolRegistry:
             all_tools.extend(make_notion_tools(user_id, services["notion_service"]))
 
         # 4. Memory Tools
-        from panager.tools.memory import make_memory_tools
+        if "memory_service" in services:
+            from panager.tools.memory import make_memory_tools
 
-        all_tools.extend(make_memory_tools())
+            all_tools.extend(make_memory_tools(user_id, services["memory_service"]))
 
         # 5. Scheduler Tools
-        from panager.tools.scheduler import make_scheduler_tools
+        if "scheduler_service" in services:
+            from panager.tools.scheduler import make_scheduler_tools
 
-        all_tools.extend(make_scheduler_tools())
+            all_tools.extend(
+                make_scheduler_tools(user_id, services["scheduler_service"])
+            )
 
         return all_tools
 

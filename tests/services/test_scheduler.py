@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from panager.services.scheduler import NotificationProvider, SchedulerService
 

@@ -50,12 +50,16 @@ async def test_main_orchestration():
         patch("panager.main.create_app") as mock_create_app,
         patch("panager.main.uvicorn.Server") as mock_server_cls,
         patch("panager.main.PanagerBot") as mock_bot_cls,
+        patch("panager.agent.registry.ToolRegistry") as mock_registry_cls,
         patch("panager.main.configure_logging"),
         patch("panager.main.os.makedirs"),
         patch("panager.main.close_pool", new_callable=AsyncMock) as mock_close_pool,
         patch("panager.main.SchedulerService") as mock_scheduler_service_cls,
     ):
         # Setup mocks
+        mock_registry = MagicMock()
+        mock_registry.sync_to_db = AsyncMock()
+        mock_registry_cls.return_value = mock_registry
         mock_settings = MagicMock()
         mock_settings.log_file_path = "/tmp/panager.log"
         mock_settings.postgres_dsn_asyncpg = "postgresql://user:pass@host:5432/db"

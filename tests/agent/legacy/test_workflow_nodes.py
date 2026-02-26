@@ -63,9 +63,7 @@ async def test_auth_interrupt_node_notion_failure():
         "next_worker": "NotionWorker",
     }
 
-    with patch(
-        "panager.agent.workflow.interrupt", return_value="cancelled"
-    ) as mock_interrupt:
+    with patch("panager.agent.workflow.interrupt", return_value="cancelled"):
         res = auth_interrupt_node(state)
 
         assert res["next_worker"] == "FINISH"

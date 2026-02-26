@@ -28,7 +28,7 @@ class SetupWebhookInput(BaseModel):
 
 
 def make_github_tools(user_id: int, github_service: GithubService) -> list[BaseTool]:
-    @tool(args_schema=ListReposInput, metadata={"domain": "github"})
+    @tool(args_schema=ListReposInput)
     async def list_github_repositories() -> str:
         """GitHub 사용자의 저장소 목록을 조회합니다."""
         # ...
@@ -53,7 +53,7 @@ def make_github_tools(user_id: int, github_service: GithubService) -> list[BaseT
                 {"status": "success", "repositories": result}, ensure_ascii=False
             )
 
-    @tool(args_schema=SetupWebhookInput, metadata={"domain": "github"})
+    @tool(args_schema=SetupWebhookInput)
     async def setup_github_webhook(repo_full_name: str, webhook_url: str) -> str:
         """GitHub 저장소에 Push 이벤트용 Webhook을 설정합니다.
 
@@ -82,4 +82,6 @@ def make_github_tools(user_id: int, github_service: GithubService) -> list[BaseT
                     {"status": "error", "message": response.text}, ensure_ascii=False
                 )
 
+    list_github_repositories.metadata = {"domain": "github"}
+    setup_github_webhook.metadata = {"domain": "github"}
     return [list_github_repositories, setup_github_webhook]

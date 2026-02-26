@@ -3,7 +3,7 @@ import hashlib
 import hmac
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import Request, HTTPException
 from httpx import ASGITransport, AsyncClient
 from panager.api.main import create_app
 from panager.api.webhooks import verify_signature

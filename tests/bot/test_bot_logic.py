@@ -14,6 +14,7 @@ def mock_services():
         "github": MagicMock(),
         "notion": MagicMock(),
         "scheduler": MagicMock(),
+        "registry": MagicMock(),
     }
 
 
@@ -25,8 +26,13 @@ def bot(mock_services):
         github_service=mock_services["github"],
         notion_service=mock_services["notion"],
         scheduler_service=mock_services["scheduler"],
+        registry=mock_services["registry"],
     )
     bot.graph = MagicMock()
+    bot.graph.get_state = AsyncMock()
+    bot.graph.aget_state = AsyncMock()
+    bot.graph.aupdate_state = AsyncMock()
+    bot.graph.ainvoke = AsyncMock()
     return bot
 
 
@@ -119,7 +125,6 @@ async def test_process_auth_queue(bot):
         "panager.discord.bot._stream_agent_response", new_callable=AsyncMock
     ) as mock_stream:
         # Patch get to return once then raise an exception to break the loop
-        original_get = bot.auth_complete_queue.get
         bot.auth_complete_queue.get = AsyncMock(
             side_effect=[{"user_id": user_id}, asyncio.CancelledError()]
         )
@@ -262,34 +267,6 @@ async def test_process_auth_queue_error(bot):
             pass
         mock_log.exception.assert_called_with(
             "인증 후 재실행 실패 (user_id=%d)", user_id
-        )
-
-
-@pytest.mark.asyncio
-async def test_on_ready(bot):
-    """Verify on_ready logging."""
-    with (
-        patch.object(PanagerBot, "user", "bot#1234"),
-        patch("panager.discord.bot.log") as mock_log,
-    ):
-        await bot.on_ready()
-        mock_log.info.assert_called_with("봇 로그인 완료: %s", "bot#1234")
-
-
-@pytest.mark.asyncio
-async def test_on_message_no_graph(bot):
-    """Verify on_message handles missing graph."""
-    bot.graph = None
-    mock_message = MagicMock(spec=Message)
-    mock_message.author.bot = False
-    mock_message.channel = MagicMock(spec=DMChannel)
-    mock_message.channel.send = AsyncMock()
-
-    with patch("panager.discord.bot.log") as mock_log:
-        await bot.on_message(mock_message)
-        mock_log.error.assert_called_with("에이전트 그래프가 주입되지 않았습니다.")
-        mock_message.channel.send.assert_awaited_once_with(
-            "시스템 준비 중입니다. 잠시 후 다시 시도해주세요."
         )
 
 

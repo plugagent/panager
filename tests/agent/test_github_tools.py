@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from panager.agent.github.tools import make_github_tools
+from panager.tools.github import make_github_tools
 
 
 @pytest.fixture

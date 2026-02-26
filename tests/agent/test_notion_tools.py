@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from panager.agent.notion.tools import make_notion_tools
+from panager.tools.notion import make_notion_tools
 
 
 @pytest.fixture

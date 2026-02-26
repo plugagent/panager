@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import zoneinfo
 from datetime import datetime
@@ -21,13 +22,6 @@ if TYPE_CHECKING:
 
 
 log = logging.getLogger(__name__)
-
-
-from langchain_core.messages import (
-    HumanMessage,
-    SystemMessage,
-    AIMessage,
-)
 
 
 async def supervisor_node(
@@ -57,8 +51,7 @@ async def supervisor_node(
     # 검색된 도구들이 있으면 LLM에 바인딩
     discovered_tools = state.get("discovered_tools", [])
     if discovered_tools:
-        # 도구 스키마를 기반으로 임시 도구 생성 (실행은 tool_executor에서 함)
-        # LangChain의 bind_tools는 도구 정의만 있으면 됨
+        # 이미 discovery_node에서 OpenAI function 규격으로 변환됨
         llm = llm.bind_tools(discovered_tools)
 
     system_prompt = (
@@ -82,13 +75,11 @@ async def supervisor_node(
         clean_content = last_msg.content.replace("[SCHEDULED_EVENT]", "").strip()
         state["messages"][-1] = HumanMessage(
             content=clean_content,
-            id=last_msg.id,
-            additional_kwargs=last_msg.additional_kwargs,
+            id=getattr(last_msg, "id", None),
+            additional_kwargs=getattr(last_msg, "additional_kwargs", {}),
         )
 
-    # 메시지 트리밍
-    from panager.agent.utils import trim_agent_messages
-
+    # 메시지 트리밍 및 예약어 정제
     trimmed_messages = trim_agent_messages(
         state["messages"],
         max_tokens=settings.checkpoint_max_tokens,
@@ -97,6 +88,15 @@ async def supervisor_node(
     if state.get("is_system_trigger"):
         system_prompt += "\n\nNote: This is an automated trigger (e.g., scheduled notification). Please handle it accordingly. (과거에 예약된 작업입니다. 사용자가 보낸 것처럼 자연스럽게 처리하세요.)"
 
+    # 추가 컨텍스트 주입 (테스트 호환성 및 기능성 유지)
+    task_summary = state.get("task_summary")
+    if task_summary:
+        system_prompt += f"\n\nRecent worker activity summary: {task_summary}"
+
+    pending_reflections = state.get("pending_reflections")
+    if pending_reflections:
+        system_prompt += f"\n\nPending Reflections (GitHub changes needing review):\n{json.dumps(pending_reflections, indent=2)}"
+
     messages = [SystemMessage(content=system_prompt)] + trimmed_messages
 
     # ...
@@ -104,8 +104,10 @@ async def supervisor_node(
     response = await llm.ainvoke(messages)
 
     # LLM이 도구 호출을 선택한 경우
+    res: dict = {"timezone": tz_name}
     if isinstance(response, AIMessage) and response.tool_calls:
-        return {"messages": [response]}
+        res["messages"] = [response]
+        return res
 
     # 도구 호출이 없는 경우, 텍스트 응답이거나 라우팅 결정일 수 있음
     # 기존 Pydantic 파싱 로직을 유지하여 하위 호환성 확보
@@ -120,9 +122,11 @@ async def supervisor_node(
         ):
             parser = PydanticOutputParser(pydantic_object=Route)
             route = parser.parse(response.content)
-            return {"next_worker": route.next_worker, "messages": [response]}
+            res.update({"next_worker": route.next_worker, "messages": [response]})
+            return res
     except Exception:
         pass
 
     # 일반 응답인 경우 종료
-    return {"next_worker": "FINISH", "messages": [response]}
+    res.update({"next_worker": "FINISH", "messages": [response]})
+    return res

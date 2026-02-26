@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage
 from panager.discord.handlers import _stream_agent_response, handle_dm
 
 if TYPE_CHECKING:
-    from langgraph.graph.state import CompiledGraph
+    from langgraph.graph.state import CompiledStateGraph as CompiledGraph
     from panager.agent.registry import ToolRegistry
     from panager.services.google import GoogleService
     from panager.services.github import GithubService
@@ -36,7 +36,10 @@ class PanagerBot(discord.Client):
         scheduler_service: SchedulerService,
         registry: ToolRegistry,
     ) -> None:
-        # ...
+        super().__init__(intents=discord.Intents.default())
+        self.memory_service = memory_service
+        self.google_service = google_service
+        self.github_service = github_service
         self.notion_service = notion_service
         self.scheduler_service = scheduler_service
         self.registry = registry
@@ -125,18 +128,15 @@ class PanagerBot(discord.Client):
                 dm = await user.create_dm()
                 config = {"configurable": {"thread_id": str(user_id)}}
 
-                # 인증 메시지 정리 (삭제 또는 수정)
-                current_state = await self.graph.get_state(config)
+                # 인증 메시지 재사용 (단일 메시지 UX)
+                current_state = await self.graph.aget_state(config)
                 auth_message_id = current_state.values.get("auth_message_id")
+                initial_msg = None
                 if auth_message_id:
                     try:
-                        auth_msg = await dm.fetch_message(auth_message_id)
-                        await auth_msg.edit(
-                            content="✅ 인증이 완료되었습니다. 작업을 계속합니다."
-                        )
-                        # 또는 삭제하려면: await auth_msg.delete()
+                        initial_msg = await dm.fetch_message(auth_message_id)
                     except Exception:
-                        log.debug("인증 메시지 정리 실패 (무시함)")
+                        log.debug("이전 인증 메시지를 찾을 수 없음 (새로 생성)")
 
                 state = {
                     "user_id": user_id,
@@ -145,7 +145,9 @@ class PanagerBot(discord.Client):
                     "is_system_trigger": False,
                 }
                 async with self._get_user_lock(user_id):
-                    await _stream_agent_response(self.graph, state, config, dm)
+                    await _stream_agent_response(
+                        self.graph, state, config, dm, initial_msg=initial_msg
+                    )
             except Exception:
                 log.exception("인증 후 재실행 실패 (user_id=%d)", user_id)
 

@@ -70,3 +70,16 @@ def make_manage_user_memory(user_id: int, memory_service: MemoryService) -> Base
         raise ValueError(f"지원하지 않는 액션입니다: {action}")
 
     return manage_user_memory
+
+
+def make_memory_tools(
+    user_id: int = 0, memory_service: MemoryService | None = None
+) -> list[BaseTool]:
+    """Memory 관련 도구 목록을 반환합니다."""
+    if memory_service is None:
+        # 인덱싱용 프로토타입 생성 시 mock 서비스 사용
+        from unittest.mock import MagicMock
+
+        memory_service = MagicMock()
+
+    return [make_manage_user_memory(user_id, memory_service)]

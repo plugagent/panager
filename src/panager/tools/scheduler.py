@@ -96,3 +96,16 @@ def make_manage_dm_scheduler(
         raise ValueError(f"지원하지 않는 액션입니다: {action}")
 
     return manage_dm_scheduler
+
+
+def make_scheduler_tools(
+    user_id: int = 0, scheduler_service: SchedulerService | None = None
+) -> list[BaseTool]:
+    """Scheduler 관련 도구 목록을 반환합니다."""
+    if scheduler_service is None:
+        # 인덱싱용 프로토타입 생성 시 mock 서비스 사용
+        from unittest.mock import MagicMock
+
+        scheduler_service = MagicMock()
+
+    return [make_manage_dm_scheduler(user_id, scheduler_service)]
