@@ -8,3 +8,9 @@ logs/
 dist/
 .cache/
 .worktrees/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+nosetests.xml
