@@ -75,3 +75,56 @@ async def test_add_schedule(mock_pool, mock_scheduler, mock_conn):
         id=str(schedule_id),
         replace_existing=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_cancel_schedule_success(mock_pool, mock_scheduler, mock_conn):
+    service = SchedulerService(pool=mock_pool)
+    user_id = 123
+    schedule_id = "12345678-1234-5678-1234-567812345678"
+
+    # Mock DB interaction: DELETE returns "DELETE 1"
+    mock_conn.execute.return_value = "DELETE 1"
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    result = await service.cancel_schedule(user_id, schedule_id)
+
+    assert result is True
+    mock_conn.execute.assert_called_once()
+    mock_scheduler.remove_job.assert_called_once_with(schedule_id)
+
+
+@pytest.mark.asyncio
+async def test_cancel_schedule_not_found(mock_pool, mock_scheduler, mock_conn):
+    service = SchedulerService(pool=mock_pool)
+    user_id = 123
+    schedule_id = "12345678-1234-5678-1234-567812345678"
+
+    # Mock DB interaction: DELETE returns "DELETE 0"
+    mock_conn.execute.return_value = "DELETE 0"
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    result = await service.cancel_schedule(user_id, schedule_id)
+
+    assert result is False
+    mock_conn.execute.assert_called_once()
+    mock_scheduler.remove_job.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cancel_schedule_scheduler_error(mock_pool, mock_scheduler, mock_conn):
+    service = SchedulerService(pool=mock_pool)
+    user_id = 123
+    schedule_id = "12345678-1234-5678-1234-567812345678"
+
+    # Mock DB interaction
+    mock_conn.execute.return_value = "DELETE 1"
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    # Mock scheduler error
+    mock_scheduler.remove_job.side_effect = Exception("Job not found")
+
+    result = await service.cancel_schedule(user_id, schedule_id)
+
+    assert result is True  # Should return True even if scheduler removal fails
+    mock_scheduler.remove_job.assert_called_once_with(schedule_id)
