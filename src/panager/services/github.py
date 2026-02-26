@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import asyncpg
 import httpx
@@ -71,8 +71,6 @@ class GithubService:
         }
         # If expires_in is present, calculate expires_at
         if "expires_in" in data:
-            from datetime import timedelta
-
             tokens["expires_at"] = datetime.now(timezone.utc) + timedelta(
                 seconds=data["expires_in"]
             )

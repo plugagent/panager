@@ -61,6 +61,11 @@ class NotionService:
             response.raise_for_status()
             data = response.json()
 
+        if "error" in data:
+            raise ValueError(
+                f"Notion OAuth error: {data.get('error_description', data['error'])}"
+            )
+
         tokens = {
             "access_token": data["access_token"],
             "workspace_id": data.get("workspace_id"),
