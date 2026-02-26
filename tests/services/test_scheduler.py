@@ -210,3 +210,51 @@ async def test_execute_schedule_max_retries_exceeded(mock_pool, mock_provider, c
         assert mock_provider.send_notification.call_count == 4  # 1 initial + 3 retries
         assert mock_sleep.call_count == 3
         assert "스케줄 실행 최대 재시도 초과" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_restore_schedules(mock_pool, mock_scheduler, mock_conn):
+    service = SchedulerService(pool=mock_pool)
+
+    # Mock DB interaction: return 2 rows
+    rows = [
+        {
+            "id": UUID("12345678-1234-5678-1234-567812345671"),
+            "user_id": 1,
+            "message": "msg1",
+            "trigger_at": datetime.now(timezone.utc),
+            "type": "notification",
+            "payload": None,
+        },
+        {
+            "id": UUID("12345678-1234-5678-1234-567812345672"),
+            "user_id": 2,
+            "message": "msg2",
+            "trigger_at": datetime.now(timezone.utc),
+            "type": "command",
+            "payload": '{"key": "val"}',
+        },
+    ]
+    mock_conn.fetch.return_value = rows
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    await service.restore_schedules()
+
+    assert mock_scheduler.add_job.call_count == 2
+    mock_conn.fetch.assert_called_once()
+
+    # Check 2nd job (command type with payload)
+    mock_scheduler.add_job.assert_any_call(
+        service._execute_schedule,
+        "date",
+        run_date=rows[1]["trigger_at"],
+        args=[
+            rows[1]["user_id"],
+            str(rows[1]["id"]),
+            rows[1]["message"],
+            rows[1]["type"],
+            {"key": "val"},
+        ],
+        id=str(rows[1]["id"]),
+        replace_existing=True,
+    )
