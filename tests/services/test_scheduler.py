@@ -165,3 +165,48 @@ async def test_execute_schedule_command_success(mock_pool, mock_conn, mock_provi
     mock_provider.trigger_task.assert_called_once_with(user_id, message, payload)
     mock_conn.execute.assert_called_once()
     assert "UPDATE schedules SET sent = TRUE" in mock_conn.execute.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_execute_schedule_no_provider(mock_pool, caplog):
+    service = SchedulerService(pool=mock_pool, notification_provider=None)
+    user_id = 123
+
+    await service._execute_schedule(user_id, "sid", "msg")
+
+    assert "알림 제공자가 설정되지 않아" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_execute_schedule_retry_success(mock_pool, mock_conn, mock_provider):
+    service = SchedulerService(pool=mock_pool, notification_provider=mock_provider)
+    user_id = 123
+    schedule_id = "12345678-1234-5678-1234-567812345678"
+
+    # 1st call fails, 2nd succeeds
+    mock_provider.send_notification.side_effect = [Exception("Fail"), None]
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        await service._execute_schedule(user_id, schedule_id, "msg")
+
+        assert mock_provider.send_notification.call_count == 2
+        mock_sleep.assert_called_once_with(1)  # 2**0
+        mock_conn.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_execute_schedule_max_retries_exceeded(mock_pool, mock_provider, caplog):
+    service = SchedulerService(pool=mock_pool, notification_provider=mock_provider)
+    user_id = 123
+    schedule_id = "12345678-1234-5678-1234-567812345678"
+
+    # All attempts fail
+    mock_provider.send_notification.side_effect = Exception("Permanent Fail")
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        await service._execute_schedule(user_id, schedule_id, "msg")
+
+        assert mock_provider.send_notification.call_count == 4  # 1 initial + 3 retries
+        assert mock_sleep.call_count == 3
+        assert "스케줄 실행 최대 재시도 초과" in caplog.text
