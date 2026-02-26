@@ -41,9 +41,9 @@ jobs:
         env:
           POSTGRES_USER: panager
           POSTGRES_PASSWORD: panager
-          POSTGRES_DB: panager_test
+          POSTGRES_DB: panager
         ports:
-          - 5433:5432
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -61,18 +61,18 @@ jobs:
       - name: Run migrations
         env:
           POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5433
+          POSTGRES_PORT: 5432
           POSTGRES_USER: panager
           POSTGRES_PASSWORD: panager
-          POSTGRES_DB: panager_test
+          POSTGRES_DB: panager
         run: uv run alembic upgrade head
       - name: Run tests
         env:
           POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5433
+          POSTGRES_PORT: 5432
           POSTGRES_USER: panager
           POSTGRES_PASSWORD: panager
-          POSTGRES_DB: panager_test
+          POSTGRES_DB: panager
         run: uv run pytest -v
 
   build:
