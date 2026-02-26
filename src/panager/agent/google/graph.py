@@ -19,15 +19,11 @@ if TYPE_CHECKING:
     from langgraph.graph import CompiledGraph
 
     from panager.services.google import GoogleService
-    from panager.services.memory import MemoryService
-    from panager.services.scheduler import SchedulerService
 
 
 def build_google_worker(
     llm: ChatOpenAI,
     google_service: GoogleService,
-    memory_service: MemoryService,
-    scheduler_service: SchedulerService,
 ) -> CompiledGraph:
     """Google Calendar 및 Tasks 관리를 위한 전담 워커 서브 그래프를 생성합니다."""
 

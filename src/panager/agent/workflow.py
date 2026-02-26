@@ -31,28 +31,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _build_tools(
-    user_id: int,
-    memory_service: MemoryService,
-    google_service: GoogleService,
-    scheduler_service: SchedulerService,
-) -> list:
-    """user_id를 클로저로 포함한 tool 인스턴스 목록을 반환합니다."""
-    from panager.agent.google.tools import (
-        make_manage_google_calendar,
-        make_manage_google_tasks,
-    )
-    from panager.agent.memory.tools import make_manage_user_memory
-    from panager.agent.scheduler.tools import make_manage_dm_scheduler
-
-    return [
-        make_manage_user_memory(user_id, memory_service),
-        make_manage_dm_scheduler(user_id, scheduler_service),
-        make_manage_google_tasks(user_id, google_service),
-        make_manage_google_calendar(user_id, google_service),
-    ]
-
-
 def auth_interrupt_node(state: AgentState):
     """인증이 필요한 경우 실행을 일시 중단하고 사용자 승인을 기다립니다."""
     auth_url = state.get("auth_request_url")
@@ -104,9 +82,7 @@ def build_graph(
     llm = get_llm(settings)
 
     # 1. 서브 워커 빌드
-    google_worker = build_google_worker(
-        llm, google_service, memory_service, scheduler_service
-    )
+    google_worker = build_google_worker(llm, google_service)
     github_worker = build_github_worker(llm, github_service)
     notion_worker = build_notion_worker(llm, notion_service)
     memory_worker = build_memory_worker(llm)

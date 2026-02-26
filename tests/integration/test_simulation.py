@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import asyncpg
+
 from panager.services.scheduler import SchedulerService
 from panager.db.connection import init_pool, close_pool, get_pool
 
 
 @pytest.fixture
-async def db_pool():
+async def db_pool() -> AsyncGenerator[asyncpg.Pool, None]:
     dsn = "postgresql://panager:panager@localhost:5433/panager_test"
     await init_pool(dsn)
     pool = get_pool()
@@ -19,7 +21,7 @@ async def db_pool():
 
 
 @pytest.mark.asyncio
-async def test_scheduler_command_simulation(db_pool):
+async def test_scheduler_command_simulation(db_pool: asyncpg.Pool) -> None:
     """에이전트 명령 예약 및 실행 시뮬레이션."""
     mock_provider = MagicMock()
     mock_provider.trigger_task = AsyncMock()
@@ -39,12 +41,12 @@ async def test_scheduler_command_simulation(db_pool):
     command = "내일 일정 요약해줘"
     trigger_at = datetime.now(timezone.utc) + timedelta(seconds=1)
 
-    # 1. 예약 (type='command')
+    # 1. 예약 (type_='command')
     schedule_id = await scheduler.add_schedule(
         user_id=user_id,
         message=command,
         trigger_at=trigger_at,
-        type="command",
+        type_="command",
         payload={"depth": 1},
     )
 
@@ -64,7 +66,7 @@ async def test_scheduler_command_simulation(db_pool):
         user_id=user_id,
         schedule_id=str(schedule_id),
         message=command,
-        type="command",
+        type_="command",
         payload={"depth": 1},
     )
 
@@ -77,10 +79,11 @@ async def test_scheduler_command_simulation(db_pool):
         sent = await conn.fetchval(
             "SELECT sent FROM schedules WHERE id = $1", schedule_id
         )
+        assert sent is True
 
 
 @pytest.mark.asyncio
-async def test_restore_schedules_integration(db_pool):
+async def test_restore_schedules_integration(db_pool: asyncpg.Pool) -> None:
     """DB에 있는 미발송 스케줄 복구 시뮬레이션."""
     mock_provider = MagicMock()
     scheduler = SchedulerService(pool=db_pool, notification_provider=mock_provider)
@@ -124,7 +127,7 @@ async def test_restore_schedules_integration(db_pool):
 
 
 @pytest.mark.asyncio
-async def test_cancel_schedule_integration(db_pool):
+async def test_cancel_schedule_integration(db_pool: asyncpg.Pool) -> None:
     """스케줄 취소 시뮬레이션."""
     mock_provider = MagicMock()
     scheduler = SchedulerService(pool=db_pool, notification_provider=mock_provider)

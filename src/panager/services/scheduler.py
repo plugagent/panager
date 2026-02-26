@@ -46,7 +46,7 @@ class SchedulerService:
         user_id: int,
         message: str,
         trigger_at: datetime,
-        type: str = "notification",
+        type_: str = "notification",
         payload: Dict[str, Any] | None = None,
     ) -> UUID:
         """새로운 알림 일정을 추가하고 스케줄러에 등록합니다."""
@@ -62,7 +62,7 @@ class SchedulerService:
                 user_id,
                 message,
                 trigger_at,
-                type,
+                type_,
                 json.dumps(payload) if payload else None,
             )
 
@@ -71,7 +71,7 @@ class SchedulerService:
             self._execute_schedule,
             "date",
             run_date=trigger_at,
-            args=[user_id, sid_str, message, type, payload],
+            args=[user_id, sid_str, message, type_, payload],
             id=sid_str,
             replace_existing=True,
         )
@@ -79,11 +79,16 @@ class SchedulerService:
 
     async def cancel_schedule(self, user_id: int, schedule_id: str) -> bool:
         """예약된 알림 일정을 취소합니다."""
+        try:
+            sid = UUID(schedule_id)
+        except ValueError:
+            return False
+
         async with self._pool.acquire() as conn:
             # user_id를 확인하여 본인의 일정만 삭제 가능하도록 함
             result = await conn.execute(
                 "DELETE FROM schedules WHERE id = $1 AND user_id = $2",
-                UUID(schedule_id),
+                sid,
                 user_id,
             )
             # result는 "DELETE 1"과 같은 형태
@@ -103,7 +108,7 @@ class SchedulerService:
         user_id: int,
         schedule_id: str,
         message: str,
-        type: str = "notification",
+        type_: str = "notification",
         payload: Dict[str, Any] | None = None,
         retry: int = 0,
     ) -> None:
@@ -116,7 +121,7 @@ class SchedulerService:
             return
 
         try:
-            if type == "command":
+            if type_ == "command":
                 await self._notification_provider.trigger_task(
                     user_id, message, payload
                 )
@@ -133,7 +138,7 @@ class SchedulerService:
                 extra={
                     "user_id": user_id,
                     "schedule_id": schedule_id,
-                    "type": type,
+                    "type": type_,
                 },
             )
         except Exception as e:
@@ -145,7 +150,7 @@ class SchedulerService:
                 )
                 await asyncio.sleep(2**retry)
                 await self._execute_schedule(
-                    user_id, schedule_id, message, type, payload, retry + 1
+                    user_id, schedule_id, message, type_, payload, retry + 1
                 )
             else:
                 log.error(

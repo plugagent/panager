@@ -1,41 +1,45 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
+from typing import Any, Dict, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-from panager.services.scheduler import SchedulerService, NotificationProvider
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from panager.services.scheduler import NotificationProvider, SchedulerService
 
 
 @pytest.fixture
-def mock_pool():
+def mock_pool() -> MagicMock:
     pool = MagicMock()
     pool.acquire = MagicMock()
     return pool
 
 
 @pytest.fixture
-def mock_conn():
+def mock_conn() -> AsyncMock:
     conn = AsyncMock()
     return conn
 
 
 @pytest.fixture
-def mock_scheduler():
+def mock_scheduler() -> Generator[AsyncMock, None, None]:
     with patch("apscheduler.schedulers.asyncio.AsyncIOScheduler") as mock:
         scheduler_instance = mock.return_value
         yield scheduler_instance
 
 
 @pytest.fixture
-def mock_provider():
+def mock_provider() -> MagicMock:
     return MagicMock(spec=NotificationProvider)
 
 
 @pytest.mark.asyncio
-async def test_init_starts_scheduler(mock_pool, mock_scheduler):
+async def test_init_starts_scheduler(
+    mock_pool: MagicMock, mock_scheduler: AsyncMock
+) -> None:
     service = SchedulerService(pool=mock_pool)
     mock_scheduler.start.assert_called_once()
     assert service._pool == mock_pool
@@ -43,27 +47,31 @@ async def test_init_starts_scheduler(mock_pool, mock_scheduler):
 
 
 @pytest.mark.asyncio
-async def test_set_notification_provider(mock_pool, mock_scheduler, mock_provider):
+async def test_set_notification_provider(
+    mock_pool: MagicMock, mock_scheduler: AsyncMock, mock_provider: MagicMock
+) -> None:
     service = SchedulerService(pool=mock_pool)
     service.set_notification_provider(mock_provider)
     assert service._notification_provider == mock_provider
 
 
 @pytest.mark.asyncio
-async def test_add_schedule(mock_pool, mock_scheduler, mock_conn):
+async def test_add_schedule(
+    mock_pool: MagicMock, mock_scheduler: AsyncMock, mock_conn: AsyncMock
+) -> None:
     service = SchedulerService(pool=mock_pool)
     user_id = 123
     message = "test message"
     trigger_at = datetime.now(timezone.utc)
-    type = "notification"
-    payload = {"key": "value"}
+    type_ = "notification"
+    payload: Dict[str, Any] = {"key": "value"}
 
     # Mock DB interaction
     schedule_id = UUID("12345678-1234-5678-1234-567812345678")
     mock_conn.fetchval.return_value = schedule_id
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
 
-    result = await service.add_schedule(user_id, message, trigger_at, type, payload)
+    result = await service.add_schedule(user_id, message, trigger_at, type_, payload)
 
     assert result == schedule_id
     mock_conn.fetchval.assert_called_once()
@@ -71,14 +79,16 @@ async def test_add_schedule(mock_pool, mock_scheduler, mock_conn):
         service._execute_schedule,
         "date",
         run_date=trigger_at,
-        args=[user_id, str(schedule_id), message, type, payload],
+        args=[user_id, str(schedule_id), message, type_, payload],
         id=str(schedule_id),
         replace_existing=True,
     )
 
 
 @pytest.mark.asyncio
-async def test_cancel_schedule_success(mock_pool, mock_scheduler, mock_conn):
+async def test_cancel_schedule_success(
+    mock_pool: MagicMock, mock_scheduler: AsyncMock, mock_conn: AsyncMock
+) -> None:
     service = SchedulerService(pool=mock_pool)
     user_id = 123
     schedule_id = "12345678-1234-5678-1234-567812345678"
@@ -95,7 +105,16 @@ async def test_cancel_schedule_success(mock_pool, mock_scheduler, mock_conn):
 
 
 @pytest.mark.asyncio
-async def test_cancel_schedule_not_found(mock_pool, mock_scheduler, mock_conn):
+async def test_cancel_schedule_invalid_uuid(mock_pool: MagicMock) -> None:
+    service = SchedulerService(pool=mock_pool)
+    result = await service.cancel_schedule(123, "invalid-uuid")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_cancel_schedule_not_found(
+    mock_pool: MagicMock, mock_scheduler: AsyncMock, mock_conn: AsyncMock
+) -> None:
     service = SchedulerService(pool=mock_pool)
     user_id = 123
     schedule_id = "12345678-1234-5678-1234-567812345678"
@@ -112,7 +131,9 @@ async def test_cancel_schedule_not_found(mock_pool, mock_scheduler, mock_conn):
 
 
 @pytest.mark.asyncio
-async def test_cancel_schedule_scheduler_error(mock_pool, mock_scheduler, mock_conn):
+async def test_cancel_schedule_scheduler_error(
+    mock_pool: MagicMock, mock_scheduler: AsyncMock, mock_conn: AsyncMock
+) -> None:
     service = SchedulerService(pool=mock_pool)
     user_id = 123
     schedule_id = "12345678-1234-5678-1234-567812345678"
@@ -132,8 +153,8 @@ async def test_cancel_schedule_scheduler_error(mock_pool, mock_scheduler, mock_c
 
 @pytest.mark.asyncio
 async def test_execute_schedule_notification_success(
-    mock_pool, mock_conn, mock_provider
-):
+    mock_pool: MagicMock, mock_conn: AsyncMock, mock_provider: MagicMock
+) -> None:
     service = SchedulerService(pool=mock_pool, notification_provider=mock_provider)
     user_id = 123
     schedule_id = "12345678-1234-5678-1234-567812345678"
@@ -141,7 +162,7 @@ async def test_execute_schedule_notification_success(
 
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
 
-    await service._execute_schedule(user_id, schedule_id, message, type="notification")
+    await service._execute_schedule(user_id, schedule_id, message, type_="notification")
 
     mock_provider.send_notification.assert_called_once_with(user_id, message)
     mock_conn.execute.assert_called_once()
@@ -149,7 +170,9 @@ async def test_execute_schedule_notification_success(
 
 
 @pytest.mark.asyncio
-async def test_execute_schedule_command_success(mock_pool, mock_conn, mock_provider):
+async def test_execute_schedule_command_success(
+    mock_pool: MagicMock, mock_conn: AsyncMock, mock_provider: MagicMock
+) -> None:
     service = SchedulerService(pool=mock_pool, notification_provider=mock_provider)
     user_id = 123
     schedule_id = "12345678-1234-5678-1234-567812345678"
@@ -159,7 +182,7 @@ async def test_execute_schedule_command_success(mock_pool, mock_conn, mock_provi
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
 
     await service._execute_schedule(
-        user_id, schedule_id, message, type="command", payload=payload
+        user_id, schedule_id, message, type_="command", payload=payload
     )
 
     mock_provider.trigger_task.assert_called_once_with(user_id, message, payload)
@@ -168,7 +191,9 @@ async def test_execute_schedule_command_success(mock_pool, mock_conn, mock_provi
 
 
 @pytest.mark.asyncio
-async def test_execute_schedule_no_provider(mock_pool, caplog):
+async def test_execute_schedule_no_provider(
+    mock_pool: MagicMock, caplog: pytest.LogCaptureFixture
+) -> None:
     service = SchedulerService(pool=mock_pool, notification_provider=None)
     user_id = 123
 
@@ -178,7 +203,9 @@ async def test_execute_schedule_no_provider(mock_pool, caplog):
 
 
 @pytest.mark.asyncio
-async def test_execute_schedule_retry_success(mock_pool, mock_conn, mock_provider):
+async def test_execute_schedule_retry_success(
+    mock_pool: MagicMock, mock_conn: AsyncMock, mock_provider: MagicMock
+) -> None:
     service = SchedulerService(pool=mock_pool, notification_provider=mock_provider)
     user_id = 123
     schedule_id = "12345678-1234-5678-1234-567812345678"
@@ -196,7 +223,9 @@ async def test_execute_schedule_retry_success(mock_pool, mock_conn, mock_provide
 
 
 @pytest.mark.asyncio
-async def test_execute_schedule_max_retries_exceeded(mock_pool, mock_provider, caplog):
+async def test_execute_schedule_max_retries_exceeded(
+    mock_pool: MagicMock, mock_provider: MagicMock, caplog: pytest.LogCaptureFixture
+) -> None:
     service = SchedulerService(pool=mock_pool, notification_provider=mock_provider)
     user_id = 123
     schedule_id = "12345678-1234-5678-1234-567812345678"
@@ -213,7 +242,9 @@ async def test_execute_schedule_max_retries_exceeded(mock_pool, mock_provider, c
 
 
 @pytest.mark.asyncio
-async def test_restore_schedules(mock_pool, mock_scheduler, mock_conn):
+async def test_restore_schedules(
+    mock_pool: MagicMock, mock_scheduler: AsyncMock, mock_conn: AsyncMock
+) -> None:
     service = SchedulerService(pool=mock_pool)
 
     # Mock DB interaction: return 2 rows

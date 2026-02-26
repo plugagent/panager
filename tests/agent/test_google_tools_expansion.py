@@ -1,14 +1,17 @@
 from __future__ import annotations
+
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from panager.agent.google.tools import (
-    TaskAction,
-    CalendarAction,
-    make_manage_google_tasks,
-    make_manage_google_calendar,
-)
+
+import pytest
 from pydantic import ValidationError
+
+from panager.agent.google.tools import (
+    CalendarAction,
+    TaskAction,
+    make_manage_google_calendar,
+    make_manage_google_tasks,
+)
 
 
 @pytest.fixture
