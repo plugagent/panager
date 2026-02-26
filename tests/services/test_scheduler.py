@@ -47,3 +47,31 @@ async def test_set_notification_provider(mock_pool, mock_scheduler, mock_provide
     service = SchedulerService(pool=mock_pool)
     service.set_notification_provider(mock_provider)
     assert service._notification_provider == mock_provider
+
+
+@pytest.mark.asyncio
+async def test_add_schedule(mock_pool, mock_scheduler, mock_conn):
+    service = SchedulerService(pool=mock_pool)
+    user_id = 123
+    message = "test message"
+    trigger_at = datetime.now(timezone.utc)
+    type = "notification"
+    payload = {"key": "value"}
+
+    # Mock DB interaction
+    schedule_id = UUID("12345678-1234-5678-1234-567812345678")
+    mock_conn.fetchval.return_value = schedule_id
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    result = await service.add_schedule(user_id, message, trigger_at, type, payload)
+
+    assert result == schedule_id
+    mock_conn.fetchval.assert_called_once()
+    mock_scheduler.add_job.assert_called_once_with(
+        service._execute_schedule,
+        "date",
+        run_date=trigger_at,
+        args=[user_id, str(schedule_id), message, type, payload],
+        id=str(schedule_id),
+        replace_existing=True,
+    )
