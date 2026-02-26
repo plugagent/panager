@@ -128,3 +128,40 @@ async def test_cancel_schedule_scheduler_error(mock_pool, mock_scheduler, mock_c
 
     assert result is True  # Should return True even if scheduler removal fails
     mock_scheduler.remove_job.assert_called_once_with(schedule_id)
+
+
+@pytest.mark.asyncio
+async def test_execute_schedule_notification_success(
+    mock_pool, mock_conn, mock_provider
+):
+    service = SchedulerService(pool=mock_pool, notification_provider=mock_provider)
+    user_id = 123
+    schedule_id = "12345678-1234-5678-1234-567812345678"
+    message = "test message"
+
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    await service._execute_schedule(user_id, schedule_id, message, type="notification")
+
+    mock_provider.send_notification.assert_called_once_with(user_id, message)
+    mock_conn.execute.assert_called_once()
+    assert "UPDATE schedules SET sent = TRUE" in mock_conn.execute.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_execute_schedule_command_success(mock_pool, mock_conn, mock_provider):
+    service = SchedulerService(pool=mock_pool, notification_provider=mock_provider)
+    user_id = 123
+    schedule_id = "12345678-1234-5678-1234-567812345678"
+    message = "test command"
+    payload = {"depth": 1}
+
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    await service._execute_schedule(
+        user_id, schedule_id, message, type="command", payload=payload
+    )
+
+    mock_provider.trigger_task.assert_called_once_with(user_id, message, payload)
+    mock_conn.execute.assert_called_once()
+    assert "UPDATE schedules SET sent = TRUE" in mock_conn.execute.call_args[0][0]
