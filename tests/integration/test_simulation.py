@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
@@ -13,7 +14,9 @@ from panager.db.connection import init_pool, close_pool, get_pool
 
 @pytest.fixture
 async def db_pool() -> AsyncGenerator[asyncpg.Pool, None]:
-    dsn = "postgresql://panager:panager@localhost:5433/panager_test"
+    dsn = os.environ.get(
+        "TEST_DATABASE_URL", "postgresql://panager:panager@localhost:5432/panager"
+    )
     await init_pool(dsn)
     pool = get_pool()
     yield pool

@@ -6,7 +6,7 @@ async def test_init_and_close_pool():
     import os
 
     dsn = os.environ.get(
-        "TEST_DATABASE_URL", "postgresql://panager:panager@localhost:5433/panager_test"
+        "TEST_DATABASE_URL", "postgresql://panager:panager@localhost:5432/panager"
     )
     from panager.db.connection import init_pool, close_pool, get_pool
 
