@@ -92,3 +92,50 @@ When testing via Discord DM:
 - **Exceptions**: Use specialized exception classes defined in `src/panager/core/exceptions.py`.
 - **Logging**: Use the project-wide logger. Avoid `print()` statements; use `logger.info()`, `logger.error()`, etc., to provide visibility into agent execution.
 
+---
+
+## 🔄 Workflow & Commits
+
+### 🌳 Git Workflow
+- **Branching**: All development should occur on feature branches branching off the `dev` branch.
+- **Commits**: Strictly follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+  - **Subject**: Must be in English (e.g., `feat: Add Google Calendar tool`).
+  - **Body**: **MANDATORY** Korean description of the changes (e.g., `구글 캘린더 도구를 추가하고 OAuth2 인증 흐름을 구현함.`).
+  - **Format**:
+    ```text
+    <type>(<scope>): <subject>
+
+    <body>
+    ```
+
+### 📦 Conventional Commit Types
+- `feat`: A new feature
+- `fix`: A bug fix
+- `docs`: Documentation only changes
+- `style`: Changes that do not affect the meaning of the code (formatting, white-space, etc)
+- `refactor`: A code change that neither fixes a bug nor adds a feature
+- `perf`: A code change that improves performance
+- `test`: Adding missing tests or correcting existing tests
+- `chore`: Changes to the build process or auxiliary tools and libraries
+
+---
+
+## 🧠 Agent State Management
+
+### 🌊 LangGraph AgentState
+- **Definition**: The global state is managed via the `AgentState` TypedDict in `src/panager/agent/state.py`.
+- **Message Handling**: Use `Annotated[list[AnyMessage], add_messages]` for the `messages` key. This ensures that new messages from nodes are appended to the existing history.
+- **Cross-Node Communication**:
+  - Nodes should only modify the fields they are responsible for.
+  - Use `NotRequired` for optional fields to keep the state clean.
+  - Key fields include `user_id`, `username`, `messages`, and `memory_context`.
+
+### 🧵 Persistence & thread_id
+- **Thread IDs**: Every conversation with a user must be associated with a unique `thread_id` (Discord Channel ID).
+- **Checkpointers**: We use `PostgresSaver` to persist the state of each thread. This allows the agent to remember context across restarts.
+- **Resuming**: When a user sends a new message, the `thread_id` is used to load the previous state, ensuring the LLM has access to history.
+
+### 🚦 Node Best Practices
+1. **Idempotency**: Ensure that nodes can be re-run safely if an error occurs.
+2. **State Cleanup**: Always clear transient flags (e.g., `is_system_trigger`) once consumed.
+3. **Observation Handling**: Tools MUST return JSON strings, which are then added to the state as `ToolMessage` objects.
