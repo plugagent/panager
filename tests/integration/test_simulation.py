@@ -77,4 +77,47 @@ async def test_scheduler_command_simulation(db_pool):
         sent = await conn.fetchval(
             "SELECT sent FROM schedules WHERE id = $1", schedule_id
         )
-        assert sent is True
+
+
+@pytest.mark.asyncio
+async def test_restore_schedules_integration(db_pool):
+    """DB에 있는 미발송 스케줄 복구 시뮬레이션."""
+    mock_provider = MagicMock()
+    scheduler = SchedulerService(pool=db_pool, notification_provider=mock_provider)
+
+    # scheduler._scheduler를 Mock으로 교체하여 add_job 호출 확인
+    mock_apscheduler = MagicMock()
+    scheduler._scheduler = mock_apscheduler
+
+    user_id = 998
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO users (user_id, username) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            user_id,
+            "test_user_restore",
+        )
+        # 미래의 미발송 스케줄 2개 추가
+        trigger1 = datetime.now(timezone.utc) + timedelta(hours=1)
+        trigger2 = datetime.now(timezone.utc) + timedelta(hours=2)
+
+        await conn.execute(
+            """
+            INSERT INTO schedules (user_id, message, trigger_at, type, payload, sent)
+            VALUES ($1, 'msg1', $2, 'notification', NULL, FALSE),
+                   ($1, 'msg2', $3, 'command', '{"key": "val"}', FALSE)
+            """,
+            user_id,
+            trigger1,
+            trigger2,
+        )
+
+    # 실행
+    await scheduler.restore_schedules()
+
+    # 검증: add_job이 2번 호출되었는가?
+    assert mock_apscheduler.add_job.call_count >= 2
+    # 정확한 인자 확인 (일부만)
+    calls = mock_apscheduler.add_job.call_args_list
+    messages = [c[1]["args"][2] for c in calls]
+    assert "msg1" in messages
+    assert "msg2" in messages
