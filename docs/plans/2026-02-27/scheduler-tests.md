@@ -134,7 +134,7 @@ Verify DB fetch and multiple `add_job` calls.
 Insert rows to DB, call `restore_schedules`, verify mock scheduler calls.
 
 **Step 2: Run integration test**
-`POSTGRES_HOST=localhost POSTGRES_PORT=5433 pytest tests/integration/test_simulation.py`
+`POSTGRES_HOST=localhost POSTGRES_PORT=5432 pytest tests/integration/test_simulation.py`
 
 **Step 3: Commit**
 `git commit -am "test: integration test for restore_schedules"`
@@ -150,7 +150,7 @@ Insert rows to DB, call `restore_schedules`, verify mock scheduler calls.
 Add schedule, cancel it, verify DB and mock scheduler.
 
 **Step 2: Run integration test**
-`POSTGRES_HOST=localhost POSTGRES_PORT=5433 pytest tests/integration/test_simulation.py`
+`POSTGRES_HOST=localhost POSTGRES_PORT=5432 pytest tests/integration/test_simulation.py`
 
 **Step 3: Commit**
 `git commit -am "test: integration test for cancel_schedule"`

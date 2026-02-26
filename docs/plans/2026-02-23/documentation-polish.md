@@ -43,7 +43,7 @@ Guide for agentic coding agents working in this repository.
 
 ```bash
 make dev          # start test DB + hot-reload bot
-make db           # start test PostgreSQL (localhost:5433) only
+make db           # start test PostgreSQL (localhost:5432) only
 make db-down      # stop test DB
 make migrate-test # apply alembic migrations to test DB
 ```
@@ -55,7 +55,7 @@ make migrate-test # apply alembic migrations to test DB
 make test
 
 # If test DB is already running:
-POSTGRES_HOST=localhost POSTGRES_PORT=5433 uv run pytest -v
+POSTGRES_HOST=localhost POSTGRES_PORT=5432 uv run pytest -v
 
 # Tests that don't require DB (no env vars needed):
 uv run pytest tests/panager/agent/ tests/panager/discord/ tests/panager/services/ tests/test_config.py tests/test_logging.py -v

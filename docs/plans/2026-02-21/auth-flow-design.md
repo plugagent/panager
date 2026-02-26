@@ -110,5 +110,5 @@ make up     # 프로덕션 Docker Compose 빌드+실행
 make down   # 프로덕션 정리
 ```
 
-`make dev`는 `POSTGRES_HOST=localhost POSTGRES_PORT=5433`을 환경변수로 주입하여
+`make dev`는 `POSTGRES_HOST=localhost POSTGRES_PORT=5432`을 환경변수로 주입하여
 `.env`의 Docker 내부 호스트명(`db`)을 오버라이드한다.

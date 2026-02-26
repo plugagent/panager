@@ -17,7 +17,7 @@
 - `migrate-test` 타겟: `test`와 동일하게 설정 수정
 
 ### 2.3 테스트 코드 (Test Code)
-- `tests/test_db_connection.py` 및 기타 테스트 파일에서 하드코딩된 `5433` 포트와 `panager_test` DB 명칭을 `5432` 및 `panager`로 변경
+- `tests/test_db_connection.py` 및 기타 테스트 파일에서 하드코딩된 `5432` 포트와 `panager` DB 명칭을 `5432` 및 `panager`로 변경
 
 ### 2.4 CI/CD (GitHub Workflows)
 - `.github/workflows/dev.yml` 및 `prod-ci.yml`에서 테스트용 PostgreSQL 서비스의 DB 이름을 `panager`로 통일

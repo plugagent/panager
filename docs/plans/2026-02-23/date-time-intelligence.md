@@ -70,7 +70,7 @@ Run: `uv run ruff check src/panager/agent/tools.py`
 **Step 1: Run existing tests to ensure no regressions**
 
 Run: `make test` (Note: requires DB, but logic changes might affect some tool tests)
-Or run specific agent tests: `POSTGRES_HOST=localhost POSTGRES_PORT=5433 uv run pytest tests/panager/agent/ -v`
+Or run specific agent tests: `POSTGRES_HOST=localhost POSTGRES_PORT=5432 uv run pytest tests/panager/agent/ -v`
 
 **Step 2: Final Git operations**
 

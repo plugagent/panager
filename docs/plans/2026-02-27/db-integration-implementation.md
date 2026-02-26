@@ -42,7 +42,7 @@ git commit -m "chore: docker-compose.test.yml 제거 및 Makefile DB 설정 통�
 - Modify: `tests/services/test_memory.py`
 
 **Step 1: tests/test_db_connection.py 수정**
-포트를 `5433` -> `5432`, DB명을 `panager_test` -> `panager`로 변경합니다.
+포트를 `5432` -> `5432`, DB명을 `panager` -> `panager`로 변경합니다.
 
 **Step 2: tests/services/test_memory.py 수정**
 동일하게 접속 정보를 수정합니다.
@@ -54,7 +54,7 @@ Expected: 모든 테스트 통과
 **Step 4: Commit**
 ```bash
 git add tests/
-git commit -m "test: 테스트 코드 내 DB 접속 정보 업데이트 (5433 -> 5432)"
+git commit -m "test: 테스트 코드 내 DB 접속 정보 업데이트 (5432 -> 5432)"
 ```
 
 ---
@@ -71,5 +71,5 @@ PostgreSQL 서비스 컨테이너의 `POSTGRES_DB`를 `panager`로 변경합니�
 **Step 2: Commit**
 ```bash
 git add .github/workflows/
-git commit -m "chore: CI 워크플로우 DB 이름 통일 (panager_test -> panager)"
+git commit -m "chore: CI 워크플로우 DB 이름 통일 (panager -> panager)"
 ```

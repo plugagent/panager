@@ -395,7 +395,7 @@ async def test_init_and_close_pool():
     import os
     dsn = os.environ.get(
         "TEST_DATABASE_URL",
-        "postgresql://panager:panager@localhost:5433/panager_test"
+        "postgresql://panager:panager@localhost:5432/panager"
     )
     from panager.db.connection import init_pool, close_pool, get_pool
     await init_pool(dsn)
@@ -611,7 +611,7 @@ def downgrade() -> None:
 
 ```bash
 POSTGRES_USER=panager POSTGRES_PASSWORD=panager \
-POSTGRES_HOST=localhost POSTGRES_PORT=5433 POSTGRES_DB=panager_test \
+POSTGRES_HOST=localhost POSTGRES_PORT=5432 POSTGRES_DB=panager \
 uv run alembic upgrade head
 ```
 
@@ -645,7 +645,7 @@ async def setup_db():
     from panager.db.connection import init_pool, close_pool
     dsn = os.environ.get(
         "TEST_DATABASE_URL",
-        "postgresql://panager:panager@localhost:5433/panager_test"
+        "postgresql://panager:panager@localhost:5432/panager"
     )
     await init_pool(dsn)
     # 테스트용 사용자 생성
@@ -1980,9 +1980,9 @@ services:
     environment:
       POSTGRES_USER: panager
       POSTGRES_PASSWORD: panager
-      POSTGRES_DB: panager_test
+      POSTGRES_DB: panager
     ports:
-      - "5433:5432"
+      - "5432:5432"
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
@@ -2021,7 +2021,7 @@ docker compose -f docker-compose.test.yml up -d
 
 ```bash
 POSTGRES_USER=panager POSTGRES_PASSWORD=panager \
-POSTGRES_HOST=localhost POSTGRES_PORT=5433 POSTGRES_DB=panager_test \
+POSTGRES_HOST=localhost POSTGRES_PORT=5432 POSTGRES_DB=panager \
 uv run alembic upgrade head
 ```
 

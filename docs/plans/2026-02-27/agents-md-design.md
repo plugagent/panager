@@ -21,7 +21,7 @@ The goal of this task is to create a comprehensive `AGENTS.md` file (approximate
 ### 3. Testing & Verification
 - Comprehensive `pytest` usage:
     - Running all tests: `make test`.
-    - Running a single file: `POSTGRES_HOST=localhost POSTGRES_PORT=5433 uv run pytest <path> -v`.
+    - Running a single file: `POSTGRES_HOST=localhost POSTGRES_PORT=5432 uv run pytest <path> -v`.
     - Running a single test: `... uv run pytest <path>::<test_name> -v`.
 - **Discord Direct Testing**: Instructions for running the bot and interacting via Discord, including handling OAuth buttons and checking `logs/panager.log`.
 

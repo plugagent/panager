@@ -475,7 +475,7 @@ services:
     image: pgvector/pgvector:pg16
     env_file: .env.test
     ports:
-      - "5433:5432"
+      - "5432:5432"
     tmpfs:
       - /var/lib/postgresql/data
 ```
