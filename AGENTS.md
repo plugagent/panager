@@ -99,7 +99,7 @@ When testing via Discord DM:
 ### 🌳 Git Workflow
 - **Branching**: All development should occur on feature branches branching off the `dev` branch.
 - **Commits**: Strictly follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
-  - **Subject**: Must be in English (e.g., `feat: Add Google Calendar tool`).
+  - **Subject**: **MANDATORY** Korean (e.g., `feat: 구글 캘린더 도구 추가`).
   - **Body**: **MANDATORY** Korean description of the changes (e.g., `구글 캘린더 도구를 추가하고 OAuth2 인증 흐름을 구현함.`).
   - **Format**:
     ```text
