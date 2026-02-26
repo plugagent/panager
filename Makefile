@@ -1,8 +1,11 @@
 .PHONY: dev db db-down test migrate-test up down dev-up dev-down dev-logs build-model
 
+# 환경 변수 기본값 설정
+POSTGRES_PORT ?= 5432
+
 # 로컬 개발 (Native): dev DB 올리고 봇 핫리로드 실행
 dev: db
-	POSTGRES_HOST=localhost POSTGRES_PORT=5432 \
+	POSTGRES_HOST=localhost POSTGRES_PORT=$(POSTGRES_PORT) \
 	uv run watchfiles "python -m panager.main" src
 
 # 로컬 개발 (Docker): 도커 컨테이너에서 봇 실행 (핫리로드 지원)
@@ -29,13 +32,13 @@ db-down:
 
 # DB 마이그레이션 (dev DB 사용)
 migrate-test: db
-	POSTGRES_HOST=localhost POSTGRES_PORT=5432 \
+	POSTGRES_HOST=localhost POSTGRES_PORT=$(POSTGRES_PORT) \
 	POSTGRES_USER=panager POSTGRES_PASSWORD=panager POSTGRES_DB=panager \
 	uv run alembic upgrade head
 
 # 테스트 (dev DB 사용)
 test: db
-	POSTGRES_HOST=localhost POSTGRES_PORT=5432 \
+	POSTGRES_HOST=localhost POSTGRES_PORT=$(POSTGRES_PORT) \
 	POSTGRES_USER=panager POSTGRES_PASSWORD=panager POSTGRES_DB=panager \
 	uv run pytest -v
 
