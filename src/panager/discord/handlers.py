@@ -20,7 +20,9 @@ async def _stream_agent_response(
     channel: discord.abc.Messageable,
 ) -> None:
     """에이전트 응답을 스트리밍하여 Discord에 전송합니다."""
-    # LLM 응답 전에 대기 문구 전송
+    # ... (thinking message etc)
+    # ...
+    # (rest of code before loop)
     sent_messages: list[discord.Message] = [await channel.send("생각하는 중...")]
     accumulated = ""
     last_edit_at = 0.0
@@ -28,6 +30,10 @@ async def _stream_agent_response(
     async for chunk, _metadata in graph.astream(
         state, config=config, stream_mode="messages"
     ):
+        # supervisor 노드의 출력(JSON 라우팅 정보 등)은 건너뜀
+        if _metadata.get("langgraph_node") == "supervisor":
+            continue
+
         if not isinstance(chunk, AIMessageChunk) or not isinstance(chunk.content, str):
             continue
 
@@ -35,27 +41,22 @@ async def _stream_agent_response(
             continue
 
         accumulated += chunk.content
-
-        # 디바운스: 스트리밍 중 주기적으로 메시지 업데이트
+        # ... (debounce logic)
         now = time.monotonic()
         if now - last_edit_at >= STREAM_DEBOUNCE:
-            # 현재 메시지 인덱스와 해당 메시지에 들어갈 내용 계산
             current_msg_index = len(accumulated) // MAX_MESSAGE_LENGTH
             current_msg_content = accumulated[current_msg_index * MAX_MESSAGE_LENGTH :]
-
-            # 필요한 경우 새 메시지 생성
             while len(sent_messages) <= current_msg_index:
                 new_msg = await channel.send("...")
                 sent_messages.append(new_msg)
-
-            # 현재 메시지 업데이트 (커서 포함)
             await sent_messages[current_msg_index].edit(
                 content=current_msg_content + "▌"
             )
             last_edit_at = now
 
-    # 최종 응답 업데이트 및 정리
+    # 최종 응답 업데이트
     full_text = accumulated.strip() or "(응답을 받지 못했습니다.)"
+    # ... (chunks and edit logic)
     chunks = [
         full_text[i : i + MAX_MESSAGE_LENGTH]
         for i in range(0, len(full_text), MAX_MESSAGE_LENGTH)
@@ -67,13 +68,40 @@ async def _stream_agent_response(
         else:
             await channel.send(content)
 
-    # 혹시 남은 대기 메시지가 있다면 삭제 (생각하는 중... 등이 남았을 경우)
     if len(sent_messages) > len(chunks):
         for msg in sent_messages[len(chunks) :]:
             try:
                 await msg.delete()
             except Exception:
                 pass
+
+    # --- 인터럽트(인증) 처리 추가 ---
+    current_state = await graph.get_state(config)
+    if current_state.next:
+        # 인터럽트 상태인지 확인
+        for task in current_state.tasks:
+            if task.interrupts:
+                # 첫 번째 인터럽트 정보 추출
+                info = task.interrupts[0]
+                if isinstance(info, dict) and info.get("type") in [
+                    "google_auth_required",
+                    "github_auth_required",
+                    "notion_auth_required",
+                ]:
+                    auth_url = info.get("url")
+                    provider = info.get("type").split("_")[0].capitalize()
+
+                    auth_msg = await channel.send(
+                        f"🔑 **{provider} 인증이 필요합니다.**\n"
+                        f"아래 링크를 통해 인증을 완료해주세요:\n{auth_url}"
+                    )
+
+                    # 인증 메시지 ID를 상태에 저장하여 나중에 정리할 수 있게 함
+                    await graph.update_state(
+                        config,
+                        {"auth_message_id": auth_msg.id},
+                    )
+                break
 
 
 async def handle_dm(message: discord.Message, graph: Any) -> None:

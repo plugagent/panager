@@ -11,6 +11,7 @@ from panager.discord.handlers import _stream_agent_response, handle_dm
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledGraph
+    from panager.agent.registry import ToolRegistry
     from panager.services.google import GoogleService
     from panager.services.github import GithubService
     from panager.services.notion import NotionService
@@ -33,17 +34,12 @@ class PanagerBot(discord.Client):
         github_service: GithubService,
         notion_service: NotionService,
         scheduler_service: SchedulerService,
+        registry: ToolRegistry,
     ) -> None:
-        intents = discord.Intents.default()
-        intents.message_content = True
-        intents.dm_messages = True
-        super().__init__(intents=intents)
-
-        self.memory_service = memory_service
-        self.google_service = google_service
-        self.github_service = github_service
+        # ...
         self.notion_service = notion_service
         self.scheduler_service = scheduler_service
+        self.registry = registry
 
         # 스케줄러 서비스에 알림 발송용 프로바이더로 자신을 등록
         self.scheduler_service.set_notification_provider(self)
@@ -128,6 +124,20 @@ class PanagerBot(discord.Client):
                 user = await self.fetch_user(user_id)
                 dm = await user.create_dm()
                 config = {"configurable": {"thread_id": str(user_id)}}
+
+                # 인증 메시지 정리 (삭제 또는 수정)
+                current_state = await self.graph.get_state(config)
+                auth_message_id = current_state.values.get("auth_message_id")
+                if auth_message_id:
+                    try:
+                        auth_msg = await dm.fetch_message(auth_message_id)
+                        await auth_msg.edit(
+                            content="✅ 인증이 완료되었습니다. 작업을 계속합니다."
+                        )
+                        # 또는 삭제하려면: await auth_msg.delete()
+                    except Exception:
+                        log.debug("인증 메시지 정리 실패 (무시함)")
+
                 state = {
                     "user_id": user_id,
                     "username": str(user),

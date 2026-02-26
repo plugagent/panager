@@ -34,12 +34,14 @@ class SearchNotionInput(BaseModel):
 
 
 def make_notion_tools(user_id: int, notion_service: NotionService) -> list[BaseTool]:
-    @tool(args_schema=SearchNotionInput)
+    @tool(args_schema=SearchNotionInput, metadata={"domain": "notion"})
     async def search_notion(
         query: str | None = None, filter_type: str | None = None
     ) -> str:
         """Notion에서 데이터베이스나 페이지를 검색합니다. database_id를 찾을 때 유용합니다."""
+        # ...
         client = await notion_service.get_client(user_id)
+        # ...
         params: dict[str, Any] = {}
         if query:
             params["query"] = query
@@ -65,7 +67,7 @@ def make_notion_tools(user_id: int, notion_service: NotionService) -> list[BaseT
 
         return json.dumps({"status": "success", "results": results}, ensure_ascii=False)
 
-    @tool(args_schema=CreateNotionPageInput)
+    @tool(args_schema=CreateNotionPageInput, metadata={"domain": "notion"})
     async def create_notion_page(
         database_id: str,
         properties: dict[str, Any],

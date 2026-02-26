@@ -32,8 +32,10 @@ class AgentState(TypedDict):
     # New fields
     next_worker: NotRequired[str]
     auth_request_url: NotRequired[str | None]
+    auth_message_id: NotRequired[int | None]  # Discord 메시지 ID 추적용
     task_summary: NotRequired[str]
     pending_reflections: NotRequired[list[dict]]
+    discovered_tools: NotRequired[list[dict]]  # 검색된 도구 목록
 
 
 class WorkerState(TypedDict):

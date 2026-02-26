@@ -1,25 +1,28 @@
 from __future__ import annotations
 
 import functools
+import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
-from panager.agent.google.graph import build_google_worker
-from panager.agent.github.graph import build_github_worker
-from panager.agent.notion.graph import build_notion_worker
-from panager.agent.memory.graph import build_memory_worker
-from panager.agent.scheduler.graph import build_scheduler_worker
-from panager.agent.state import AgentState, WorkerState
+from panager.agent.state import AgentState
 from panager.agent.supervisor import supervisor_node
 from panager.agent.utils import get_llm
 from panager.core.config import Settings
+from panager.agent.registry import ToolRegistry
+from panager.core.exceptions import (
+    GoogleAuthRequired,
+    GithubAuthRequired,
+    NotionAuthRequired,
+)
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
-    from langgraph.graph import CompiledGraph
+    from langgraph.graph.state import CompiledStateGraph as CompiledGraph
     from panager.agent.interfaces import UserSessionProvider
     from panager.services.google import GoogleService
     from panager.services.github import GithubService
@@ -45,7 +48,6 @@ def auth_interrupt_node(state: AgentState):
 
         resume_data = interrupt({"type": f"{provider}_auth_required", "url": auth_url})
 
-        # resume_data가 "auth_success" 문자열이거나 {"status": "auth_success"} 형태인 경우 처리
         is_success = False
         if resume_data == "auth_success":
             is_success = True
@@ -58,15 +60,122 @@ def auth_interrupt_node(state: AgentState):
         if is_success:
             return {
                 "auth_request_url": None,
+                "auth_message_id": None,
                 "next_worker": current_worker,
-            }  # Retry previous worker
+            }
 
-        # 인증 취소 또는 다른 데이터가 들어온 경우 종료로 유도
         return {
             "auth_request_url": None,
             "next_worker": "FINISH",
         }
     return {}
+
+
+async def discovery_node(state: AgentState, registry: ToolRegistry) -> dict:
+    """사용자 메시지를 기반으로 관련 도구를 검색합니다."""
+    last_msg = state["messages"][-1]
+    if not isinstance(last_msg, HumanMessage) or not last_msg.content:
+        return {}
+
+    query = str(last_msg.content)
+    clean_query = query.replace("[SCHEDULED_EVENT]", "").strip()
+
+    tools = await registry.search_tools(clean_query, limit=10)
+    discovered = []
+    for t in tools:
+        schema = {}
+        if (
+            hasattr(t, "args_schema")
+            and t.args_schema
+            and hasattr(t.args_schema, "schema")
+        ):
+            schema = t.args_schema.schema()
+
+        discovered.append(
+            {
+                "name": t.name,
+                "description": t.description,
+                "schema": schema,
+                "domain": (t.metadata.get("domain") if t.metadata else "unknown"),
+            }
+        )
+
+    return {"discovered_tools": discovered}
+
+
+async def tool_executor_node(
+    state: AgentState,
+    registry: ToolRegistry,
+    google_service: GoogleService,
+    github_service: GithubService,
+    notion_service: NotionService,
+) -> dict:
+    """도구를 직접 실행하고 결과를 반환합니다. 인증이 필요한 경우 인터럽트를 발생시킵니다."""
+    user_id = state["user_id"]
+    last_message = state["messages"][-1]
+
+    if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+        return {}
+
+    user_tools = await registry.get_tools_for_user(
+        user_id,
+        google_service=google_service,
+        github_service=github_service,
+        notion_service=notion_service,
+    )
+    tool_map = {t.name: t for t in user_tools}
+
+    tool_messages = []
+    auth_url = None
+
+    for tool_call in last_message.tool_calls:
+        try:
+            tool = tool_map.get(tool_call["name"])
+            if not tool:
+                tool_messages.append(
+                    ToolMessage(
+                        content=f"Tool {tool_call['name']} not found.",
+                        tool_call_id=tool_call["id"],
+                    )
+                )
+                continue
+
+            result = await tool.ainvoke(tool_call["args"])
+            tool_messages.append(
+                ToolMessage(content=str(result), tool_call_id=tool_call["id"])
+            )
+        except (GoogleAuthRequired, GithubAuthRequired, NotionAuthRequired):
+            # 도메인별 서비스에서 인증 URL 획득
+            if tool_call["name"] in [
+                "manage_google_calendar",
+                "manage_google_tasks",
+            ] or (tool.metadata and tool.metadata.get("domain") == "google"):
+                auth_url = google_service.get_auth_url(user_id)
+            elif "github" in tool_call["name"] or (
+                tool.metadata and tool.metadata.get("domain") == "github"
+            ):
+                auth_url = github_service.get_auth_url(user_id)
+            elif "notion" in tool_call["name"] or (
+                tool.metadata and tool.metadata.get("domain") == "notion"
+            ):
+                auth_url = notion_service.get_auth_url(user_id)
+
+            tool_messages.append(
+                ToolMessage(
+                    content=json.dumps(
+                        {"status": "error", "message": "Authentication required"},
+                        ensure_ascii=False,
+                    ),
+                    tool_call_id=tool_call["id"],
+                )
+            )
+            break
+
+    res: dict = {"messages": tool_messages}
+    if auth_url:
+        res["auth_request_url"] = auth_url
+
+    return res
 
 
 def build_graph(
@@ -77,21 +186,13 @@ def build_graph(
     github_service: GithubService,
     notion_service: NotionService,
     scheduler_service: SchedulerService,
+    registry: ToolRegistry,
 ) -> CompiledGraph:
     settings = Settings()
-    llm = get_llm(settings)
 
-    # 1. 서브 워커 빌드
-    google_worker = build_google_worker(llm, google_service)
-    github_worker = build_github_worker(llm, github_service)
-    notion_worker = build_notion_worker(llm, notion_service)
-    memory_worker = build_memory_worker(llm)
-    scheduler_worker = build_scheduler_worker(llm)
-
-    # 2. 메인 그래프 구성
     graph = StateGraph(AgentState)
 
-    # 노드 추가
+    graph.add_node("discovery", functools.partial(discovery_node, registry=registry))
     graph.add_node(
         "supervisor",
         functools.partial(
@@ -99,106 +200,42 @@ def build_graph(
         ),
     )
     graph.add_node("auth_interrupt", auth_interrupt_node)
+    graph.add_node(
+        "tool_executor",
+        functools.partial(
+            tool_executor_node,
+            registry=registry,
+            google_service=google_service,
+            github_service=github_service,
+            notion_service=notion_service,
+        ),
+    )
 
-    # 워커 노드 래퍼 정의
-    async def call_google_worker(state: AgentState) -> dict:
-        worker_state: WorkerState = {
-            "messages": state["messages"],
-            "task": "Manage Google Calendar and Tasks",
-            "main_context": dict(state),
-        }
-        res = await google_worker.ainvoke(worker_state)
-        return {
-            "messages": res["messages"],
-            "task_summary": res.get("task_summary", ""),
-            "auth_request_url": res.get("auth_request_url"),
-        }
-
-    async def call_memory_worker(state: AgentState) -> dict:
-        worker_state: WorkerState = {
-            "messages": state["messages"],
-            "task": "Manage user memory",
-            "main_context": dict(state),
-        }
-        res = await memory_worker.ainvoke(worker_state)
-        return {
-            "messages": res["messages"],
-            "task_summary": res.get("task_summary", ""),
-        }
-
-    async def call_scheduler_worker(state: AgentState) -> dict:
-        worker_state: WorkerState = {
-            "messages": state["messages"],
-            "task": "Manage dm scheduler",
-            "main_context": dict(state),
-        }
-        res = await scheduler_worker.ainvoke(worker_state)
-        return {
-            "messages": res["messages"],
-            "task_summary": res.get("task_summary", ""),
-        }
-
-    async def call_github_worker(state: AgentState) -> dict:
-        worker_state: WorkerState = {
-            "messages": state["messages"],
-            "task": "Manage GitHub Repositories and Webhooks",
-            "main_context": dict(state),
-        }
-        res = await github_worker.ainvoke(worker_state)
-        return {
-            "messages": res["messages"],
-            "task_summary": res.get("task_summary", ""),
-            "auth_request_url": res.get("auth_request_url"),
-        }
-
-    async def call_notion_worker(state: AgentState) -> dict:
-        worker_state: WorkerState = {
-            "messages": state["messages"],
-            "task": "Manage Notion Pages and Databases",
-            "main_context": dict(state),
-        }
-        res = await notion_worker.ainvoke(worker_state)
-        update = {
-            "messages": res["messages"],
-            "task_summary": res.get("task_summary", ""),
-            "auth_request_url": res.get("auth_request_url"),
-        }
-        if "pending_reflections" in res:
-            update["pending_reflections"] = res["pending_reflections"]
-        return update
-
-    graph.add_node("GoogleWorker", call_google_worker)
-    graph.add_node("GithubWorker", call_github_worker)
-    graph.add_node("NotionWorker", call_notion_worker)
-    graph.add_node("MemoryWorker", call_memory_worker)
-    graph.add_node("SchedulerWorker", call_scheduler_worker)
-
-    # 엣지 연결
-    graph.add_edge(START, "supervisor")
+    graph.add_edge(START, "discovery")
+    graph.add_edge("discovery", "supervisor")
 
     def _route(state: AgentState) -> str:
+        last_message = state["messages"][-1]
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
+            return "tool_executor"
+
         next_worker = state.get("next_worker")
         if next_worker == "FINISH" or not next_worker:
             return END
-        return next_worker
+
+        # 레거시 워커는 이제 개별 노드로 존재하지 않으므로 END로 처리하거나
+        # 필요한 경우 다시 supervisor로 보낼 수 있음.
+        # 여기서는 FINISH가 아니면 일단 END로 안전하게 처리
+        return END
 
     graph.add_conditional_edges("supervisor", _route)
 
-    # 워커 완료 후 다시 supervisor로 (루프)
-    graph.add_edge("MemoryWorker", "supervisor")
-    graph.add_edge("SchedulerWorker", "supervisor")
-
-    # 인증 가능성이 있는 워커들은 인증 필요 여부에 따라 분기
-    def _after_auth_worker(state: AgentState) -> str:
+    def _after_tool_executor(state: AgentState) -> str:
         if state.get("auth_request_url"):
             return "auth_interrupt"
         return "supervisor"
 
-    graph.add_conditional_edges("GoogleWorker", _after_auth_worker)
-    graph.add_conditional_edges("GithubWorker", _after_auth_worker)
-    graph.add_conditional_edges("NotionWorker", _after_auth_worker)
-
-    # 인증 인터럽트 후 처리
-    graph.add_conditional_edges("auth_interrupt", _route)
+    graph.add_conditional_edges("tool_executor", _after_tool_executor)
+    graph.add_conditional_edges("auth_interrupt", _after_tool_executor)
 
     return graph.compile(checkpointer=checkpointer)

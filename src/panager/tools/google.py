@@ -78,7 +78,7 @@ class CalendarToolInput(BaseModel):
 
 
 def make_manage_google_tasks(user_id: int, google_service: GoogleService) -> BaseTool:
-    @tool(args_schema=TaskToolInput)
+    @tool(args_schema=TaskToolInput, metadata={"domain": "google"})
     async def manage_google_tasks(
         action: TaskAction,
         task_id: str | None = None,
@@ -93,6 +93,7 @@ def make_manage_google_tasks(user_id: int, google_service: GoogleService) -> Bas
         - action='delete': task_id가 필수입니다. 할 일을 삭제합니다.
         """
         service = await google_service.get_tasks_service(user_id)
+        # ... (rest of implementation remains same)
 
         if action == TaskAction.LIST:
             items = []
@@ -141,7 +142,7 @@ def make_manage_google_tasks(user_id: int, google_service: GoogleService) -> Bas
 def make_manage_google_calendar(
     user_id: int, google_service: GoogleService
 ) -> BaseTool:
-    @tool(args_schema=CalendarToolInput)
+    @tool(args_schema=CalendarToolInput, metadata={"domain": "google"})
     async def manage_google_calendar(
         action: CalendarAction,
         event_id: str | None = None,

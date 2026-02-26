@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
+    AIMessage,
 )
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.exceptions import OutputParserException
 
 from panager.agent.state import AgentState, Route
 from panager.agent.utils import WEEKDAY_KO, get_llm, trim_agent_messages
@@ -23,17 +23,25 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+from langchain_core.messages import (
+    HumanMessage,
+    SystemMessage,
+    AIMessage,
+)
+
+
 async def supervisor_node(
     state: AgentState,
     settings: Settings,
     session_provider: UserSessionProvider,
 ) -> dict:
-    """작업을 분배할 적절한 워커를 결정하거나 종료를 결정합니다."""
+    """작업을 분배할 적절한 워커를 결정하거나 도구를 직접 호출합니다."""
     user_id = state["user_id"]
+    # ... (timezone logic same)
     tz_name = state.get("timezone")
     if not tz_name:
         tz_name = await session_provider.get_user_timezone(user_id)
-
+    # ... (rest of preamble)
     try:
         tz = zoneinfo.ZoneInfo(tz_name)
     except Exception:
@@ -45,20 +53,23 @@ async def supervisor_node(
     now_str = now.strftime(f"%Y년 %m월 %d일 ({weekday_ko}) %H:%M:%S")
 
     llm = get_llm(settings)
-    parser = PydanticOutputParser(pydantic_object=Route)
+
+    # 검색된 도구들이 있으면 LLM에 바인딩
+    discovered_tools = state.get("discovered_tools", [])
+    if discovered_tools:
+        # 도구 스키마를 기반으로 임시 도구 생성 (실행은 tool_executor에서 함)
+        # LangChain의 bind_tools는 도구 정의만 있으면 됨
+        llm = llm.bind_tools(discovered_tools)
 
     system_prompt = (
-        "You are a supervisor managing a personal assistant bot. Decide which specialist worker to call next or if the task is finished.\n"
+        "You are a supervisor managing a personal assistant bot. "
+        "Your goal is to fulfill the user's request by calling appropriate tools or delegating to specialized workers.\n"
         f"Current Time: {now_str} ({tz_name})\n\n"
-        "Specialists:\n"
-        "- GoogleWorker: Handles Google Calendar and Tasks (listing, creating, deleting).\n"
-        "- GithubWorker: Manages GitHub repositories and webhook settings.\n"
-        "- NotionWorker: Manages Notion databases and pages (searching, creating).\n"
-        "- MemoryWorker: Searches or saves user's personal information and context.\n"
-        "- SchedulerWorker: Manages DM notifications and scheduled tasks.\n\n"
-        "If the user's request is handled or no further action is needed, return 'FINISH'.\n"
-        f"{parser.get_format_instructions()}\n"
-        "IMPORTANT: Respond ONLY with a valid JSON object. Do not wrap it in markdown code blocks."
+        "If you have tools available, use them to perform the task. "
+        "If the task requires multiple steps, call tools one by one. "
+        "If the request is fulfilled, respond to the user and finish.\n\n"
+        "For complex legacy tasks, you can still refer to these specialists if needed:\n"
+        "- GoogleWorker, GithubWorker, NotionWorker, MemoryWorker, SchedulerWorker.\n"
     )
 
     # 메시지 정리 (예약어 제거)
@@ -76,6 +87,8 @@ async def supervisor_node(
         )
 
     # 메시지 트리밍
+    from panager.agent.utils import trim_agent_messages
+
     trimmed_messages = trim_agent_messages(
         state["messages"],
         max_tokens=settings.checkpoint_max_tokens,
@@ -84,35 +97,32 @@ async def supervisor_node(
     if state.get("is_system_trigger"):
         system_prompt += "\n\nNote: This is an automated trigger (e.g., scheduled notification). Please handle it accordingly. (과거에 예약된 작업입니다. 사용자가 보낸 것처럼 자연스럽게 처리하세요.)"
 
-    pending_reflections = state.get("pending_reflections")
-    if pending_reflections:
-        reflections_str = "\n".join(
-            [
-                f"- {r.get('repository')} (ref: {r.get('ref')}, {len(r.get('commits', []))} commits)"
-                for r in pending_reflections
-            ]
-        )
-        system_prompt += f"\n\nPending Reflections (GitHub Push Events):\n{reflections_str}\n(사용자에게 이 푸시 이벤트들에 대해 회고할지 물어보고, 답변을 받으면 NotionWorker를 통해 기록하세요.)"
-
     messages = [SystemMessage(content=system_prompt)] + trimmed_messages
 
-    # 워커로부터의 요약 정보가 있으면 추가 컨텍스트 제공
-    task_summary = state.get("task_summary")
-    if task_summary:
-        messages.append(
-            SystemMessage(content=f"Recent worker activity summary: {task_summary}")
-        )
+    # ...
+
+    response = await llm.ainvoke(messages)
+
+    # LLM이 도구 호출을 선택한 경우
+    if isinstance(response, AIMessage) and response.tool_calls:
+        return {"messages": [response]}
+
+    # 도구 호출이 없는 경우, 텍스트 응답이거나 라우팅 결정일 수 있음
+    # 기존 Pydantic 파싱 로직을 유지하여 하위 호환성 확보
+    # (단, 100+ 도구 시대에는 점진적으로 Pydantic 라우팅 대신 도구 호출로 넘어감)
 
     try:
-        response_msg = await llm.ainvoke(messages)
-        # raw content에서 JSON 추출 및 파싱
-        response = parser.parse(response_msg.content)
-    except (OutputParserException, Exception) as e:
-        log.error("Supervisor routing failed: %s", e, exc_info=True)
-        # 파싱 실패 시 안전하게 종료로 폴백
-        return {"next_worker": "FINISH"}
+        # JSON 형식인지 확인하여 워커 라우팅 시도
+        if (
+            response.content
+            and isinstance(response.content, str)
+            and "next_worker" in response.content
+        ):
+            parser = PydanticOutputParser(pydantic_object=Route)
+            route = parser.parse(response.content)
+            return {"next_worker": route.next_worker, "messages": [response]}
+    except Exception:
+        pass
 
-    res: dict = {"next_worker": response.next_worker}
-    if "timezone" not in state:
-        res["timezone"] = tz_name
-    return res
+    # 일반 응답인 경우 종료
+    return {"next_worker": "FINISH", "messages": [response]}

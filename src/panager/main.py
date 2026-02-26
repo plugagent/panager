@@ -106,6 +106,39 @@ async def main() -> None:
     notion_service = NotionService(settings, pool)
     scheduler_service = SchedulerService(pool)
 
+    # 4.5 도구 레지스트리 초기화 및 인덱싱
+    from panager.agent.registry import ToolRegistry
+
+    registry = ToolRegistry(pool, settings)
+
+    # 프로토타입 생성 (인덱싱용, user_id=0은 실제 사용되지 않음)
+    # 실제 도구 로직은 await 서비스 호출 시 에러가 날 수 있으나, 인덱싱은 name/description만 필요
+    from panager.tools.google import (
+        make_manage_google_calendar,
+        make_manage_google_tasks,
+    )
+    from panager.tools.github import make_github_tools
+    from panager.tools.notion import make_notion_tools
+    from panager.tools.memory import make_memory_tools
+    from panager.tools.scheduler import make_scheduler_tools
+
+    prototypes = [
+        make_manage_google_calendar(0, google_service),
+        make_manage_google_tasks(0, google_service),
+    ]
+
+    prototypes.extend(make_github_tools(0, github_service))
+    prototypes.extend(make_notion_tools(0, notion_service))
+    prototypes.extend(make_memory_tools())
+    prototypes.extend(make_scheduler_tools())
+
+    # 메모리 레지스트리에 프로토타입 등록 (메모리상에서는 필터링용으로 사용)
+    # 실제 워타임에는 user_id에 맞게 재생성됨
+    registry.register_tools(prototypes)
+
+    # DB와 동기화 (임베딩 생성 및 저장)
+    await registry.sync_to_db()
+
     # 5. Discord 봇 초기화 (UserSessionProvider 구현체)
     bot = PanagerBot(
         memory_service=memory_service,
@@ -113,6 +146,7 @@ async def main() -> None:
         github_service=github_service,
         notion_service=notion_service,
         scheduler_service=scheduler_service,
+        registry=registry,
     )
 
     # 6. 에이전트 워크플로우(LangGraph) 빌드 및 주입
@@ -124,6 +158,7 @@ async def main() -> None:
         github_service=github_service,
         notion_service=notion_service,
         scheduler_service=scheduler_service,
+        registry=registry,
     )
     bot.graph = graph
 

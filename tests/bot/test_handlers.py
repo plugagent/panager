@@ -11,6 +11,18 @@ async def _make_fake_stream(*chunks: str):
         yield (AIMessageChunk(content=text), {"thread_id": "test"})
 
 
+def _setup_mock_graph():
+    mock_graph = MagicMock()
+    mock_graph.get_state = AsyncMock()
+    # Default state return value (no interrupts)
+    state_mock = MagicMock()
+    state_mock.next = []
+    state_mock.tasks = []
+    mock_graph.get_state.return_value = state_mock
+    mock_graph.update_state = AsyncMock()
+    return mock_graph
+
+
 @pytest.mark.asyncio
 async def test_stream_builds_message_incrementally():
     """스트리밍 청크가 누적되어 최종 메시지에 반영되는지 검증."""
@@ -21,7 +33,7 @@ async def test_stream_builds_message_incrementally():
     sent_message.edit = AsyncMock()
     mock_channel.send = AsyncMock(return_value=sent_message)
 
-    mock_graph = MagicMock()
+    mock_graph = _setup_mock_graph()
     mock_graph.astream.return_value = _make_fake_stream("안녕", "하세요", "!")
 
     state = {"user_id": 1, "username": "test", "messages": [], "memory_context": ""}
@@ -49,7 +61,7 @@ async def test_stream_empty_response_sends_fallback():
     sent_message.edit = AsyncMock()
     mock_channel.send = AsyncMock(return_value=sent_message)
 
-    mock_graph = MagicMock()
+    mock_graph = _setup_mock_graph()
     mock_graph.astream.return_value = _make_fake_stream()  # 빈 스트림
 
     state = {"user_id": 1, "username": "test", "messages": [], "memory_context": ""}
@@ -72,7 +84,7 @@ async def test_stream_sends_initial_cursor_message():
     sent_message.edit = AsyncMock()
     mock_channel.send = AsyncMock(return_value=sent_message)
 
-    mock_graph = MagicMock()
+    mock_graph = _setup_mock_graph()
     mock_graph.astream.return_value = _make_fake_stream("hello")
 
     state = {"user_id": 1, "username": "test", "messages": [], "memory_context": ""}
@@ -94,7 +106,7 @@ async def test_stream_debounce_logic():
     sent_message.edit = AsyncMock()
     mock_channel.send = AsyncMock(return_value=sent_message)
 
-    mock_graph = MagicMock()
+    mock_graph = _setup_mock_graph()
     # 3개의 청크
     mock_graph.astream.return_value = _make_fake_stream("a", "b", "c")
 
@@ -131,7 +143,7 @@ async def test_stream_deletes_excess_messages():
     # We want to simulate multiple messages sent then deleted
     mock_channel.send = AsyncMock(side_effect=[msg1, msg2, msg3])
 
-    mock_graph = MagicMock()
+    mock_graph = _setup_mock_graph()
     # Long first chunk to trigger second message, then short final
     long_text = "x" * (MAX_MESSAGE_LENGTH + 1)
     mock_graph.astream.return_value = _make_fake_stream(long_text)
@@ -242,7 +254,7 @@ async def test_stream_skips_invalid_chunks():
     sent_message.edit = AsyncMock()
     mock_channel.send = AsyncMock(return_value=sent_message)
 
-    mock_graph = MagicMock()
+    mock_graph = _setup_mock_graph()
 
     async def fake_stream():
         # Use MagicMock instead of AIMessageChunk to avoid validation errors
@@ -284,7 +296,7 @@ async def test_stream_delete_error_handled():
 
     # current_msg_index = 2 -> sends msg2, msg3
     # final full_text is short -> msg3.delete() is called
-    mock_graph = MagicMock()
+    mock_graph = _setup_mock_graph()
     mock_graph.astream.return_value = _make_fake_stream(" " * 20)
 
     state = {"user_id": 1, "username": "test", "messages": []}
