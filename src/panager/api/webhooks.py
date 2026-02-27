@@ -94,12 +94,11 @@ async def github_webhook(
 
     # 각 사용자별로 에이전트 트리거
     for user_id in user_ids:
-        # 에이전트에게 전달할 명령 메시지 구성
+        # 에이전트에게 전달할 명령 메시지 구성 (구조화된 데이터는 payload를 통해 별도로 주입됨)
         command = (
             f"GitHub Push 알림: {repo_full_name} 저장소의 {ref} 브랜치에 "
             f"{len(extracted_commits)}개의 새로운 커밋이 푸시되었습니다. "
-            f"변경 내용을 확인하고 회고를 작성할까요?\n\n"
-            f"컨텍스트: {json.dumps(context, ensure_ascii=False)}"
+            f"변경 내용을 확인하고 회고를 작성할까요?"
         )
         # trigger_task(user_id, command, payload)
         # 현재 bot.py의 trigger_task는 payload를 직접 사용하지 않으므로 command에 context를 포함하여 전달

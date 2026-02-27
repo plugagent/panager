@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Dict, Any
 import discord
 from langchain_core.messages import HumanMessage
 
+from panager.agent.state import PendingReflection
 from panager.discord.handlers import _stream_agent_response, handle_dm
 
 if TYPE_CHECKING:
@@ -98,7 +99,11 @@ class PanagerBot(discord.Client):
                     "is_system_trigger": True,
                 }
                 if payload and "pending_reflections" in payload:
-                    state["pending_reflections"] = payload["pending_reflections"]
+                    # dict 리스트를 Pydantic 모델 리스트로 변환하여 타입 안전성 확보
+                    state["pending_reflections"] = [
+                        PendingReflection(**r) if isinstance(r, dict) else r
+                        for r in payload["pending_reflections"]
+                    ]
 
                 log.info(
                     "예약된 태스크 트리거 (user_id=%d, command=%s)", user_id, command
