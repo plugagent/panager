@@ -118,9 +118,9 @@ class PanagerBot(discord.Client):
         while True:
             event = await self.auth_complete_queue.get()
             user_id: int = event["user_id"]
-            pending_message: str | None = self._pending_messages.pop(user_id, None)
 
-            if not pending_message or self.graph is None:
+            # 인증 완료 후 재개를 위해 보류된 요청이 있는지 확인
+            if user_id not in self._pending_messages or self.graph is None:
                 continue
 
             try:
@@ -131,6 +131,7 @@ class PanagerBot(discord.Client):
                 # 인증 메시지 재사용 (단일 메시지 UX)
                 current_state = await self.graph.aget_state(config)
                 auth_message_id = current_state.values.get("auth_message_id")
+
                 initial_msg = None
                 if auth_message_id:
                     try:
@@ -138,16 +139,16 @@ class PanagerBot(discord.Client):
                     except Exception:
                         log.debug("이전 인증 메시지를 찾을 수 없음 (새로 생성)")
 
-                state = {
-                    "user_id": user_id,
-                    "username": str(user),
-                    "messages": [HumanMessage(content=pending_message)],
-                    "is_system_trigger": False,
-                }
+                # Resume 모드로 실행 (state=None)
+                # 이 시점에서 graph는 인터럽트 지점(툴 실행 후)에서 대기 중임
                 async with self._get_user_lock(user_id):
                     await _stream_agent_response(
-                        self.graph, state, config, dm, initial_msg=initial_msg
+                        self.graph, None, config, dm, initial_msg=initial_msg
                     )
+
+                # 작업 완료 후 보류 메시지 제거
+                self._pending_messages.pop(user_id, None)
+
             except Exception:
                 log.exception("인증 후 재실행 실패 (user_id=%d)", user_id)
 
@@ -168,8 +169,22 @@ class PanagerBot(discord.Client):
             )
             return
 
-        async with self._get_user_lock(message.author.id):
+        user_id = message.author.id
+        # 요청 시작 시 보류 메시지에 등록
+        self._pending_messages[user_id] = message.content
+
+        async with self._get_user_lock(user_id):
             await handle_dm(message, self.graph)
+
+            # 작업이 정상 종료(인증 인터럽트 없이)된 경우 보류 메시지 제거
+            # 인증 인터럽트가 발생했다면 _process_auth_queue에서 제거됨
+            config = {"configurable": {"thread_id": str(user_id)}}
+            try:
+                state_snapshot = await self.graph.aget_state(config)
+                if not state_snapshot.values.get("auth_request_url"):
+                    self._pending_messages.pop(user_id, None)
+            except Exception:
+                pass
 
     async def close(self) -> None:
         """봇 종료 시 리소스 정리."""

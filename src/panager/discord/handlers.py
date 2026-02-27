@@ -116,7 +116,7 @@ class ResponseManager:
 
 async def _stream_agent_response(
     graph: Any,
-    state: Dict[str, Any],
+    state: Dict[str, Any] | None,
     config: Dict[str, Any],
     channel: discord.abc.Messageable,
     initial_msg: discord.Message | None = None,
@@ -125,6 +125,7 @@ async def _stream_agent_response(
     ui = ResponseManager(channel, initial_msg)
 
     try:
+        # state가 None이면 중단된 지점부터 재개(Resume)
         # updates 모드를 사용하여 노드 전환 감지, messages 모드를 사용하여 텍스트 스트리밍
         async for event_type, chunk in graph.astream(
             state, config=config, stream_mode=["updates", "messages"]
@@ -168,8 +169,14 @@ async def _stream_agent_response(
     try:
         state_snapshot = await graph.aget_state(config)
         auth_url = state_snapshot.values.get("auth_request_url")
+
+        # 인증이 필요한 경우, 현재 메시지 ID를 상태에 저장 (나중에 Resume 시 사용)
+        if auth_url and ui.main_msg:
+            await graph.update_state(
+                config, {"auth_message_id": ui.main_msg.id}, as_node="agent"
+            )
     except Exception:
-        pass
+        log.warning("상태 스냅샷 조회 또는 업데이트 실패", exc_info=True)
 
     await ui.finalize(auth_url=auth_url)
 

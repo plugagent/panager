@@ -137,7 +137,8 @@ async def test_process_auth_queue(bot):
         mock_stream.assert_awaited_once()
         args = mock_stream.call_args[0]
         state = args[1]
-        assert state["messages"][0].content == pending_message
+        # Now state is None to trigger Resume
+        assert state is None
         assert user_id not in bot._pending_messages
 
 
@@ -171,10 +172,18 @@ async def test_on_message_calls_handle_dm(bot):
     mock_message.author.bot = False
     mock_message.author.id = 123
     mock_message.channel = MagicMock(spec=DMChannel)
+    mock_message.content = "hello"
+
+    # Mock aget_state to return finished state
+    state_mock = MagicMock()
+    state_mock.values = {}
+    bot.graph.aget_state.return_value = state_mock
 
     with patch("panager.discord.bot.handle_dm", new_callable=AsyncMock) as mock_handle:
         await bot.on_message(mock_message)
         mock_handle.assert_awaited_once_with(mock_message, bot.graph)
+        # Should be removed since no auth required
+        assert 123 not in bot._pending_messages
 
 
 @pytest.mark.asyncio
