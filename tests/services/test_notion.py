@@ -48,13 +48,15 @@ def test_notion_tokens_dataclass():
 
 
 def test_get_auth_url(notion_service, mock_settings):
+    from urllib.parse import quote
+
     user_id = 123
     url = notion_service.get_auth_url(user_id)
 
     assert "api.notion.com/v1/oauth/authorize" in url
     assert f"client_id={mock_settings.notion_client_id}" in url
-    assert f"redirect_uri={mock_settings.notion_redirect_uri}" in url
-    assert f"state={user_id}" in url
+    assert f"redirect_uri={quote(mock_settings.notion_redirect_uri, safe='')}" in url
+    assert f"state=notion_{user_id}" in url
     assert "response_type=code" in url
     assert "owner=user" in url
 

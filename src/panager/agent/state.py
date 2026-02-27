@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated, Literal, NotRequired, TypedDict, Any
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class FunctionSchema(BaseModel):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import asyncpg
 import httpx
@@ -23,9 +24,6 @@ class GithubTokens:
     access_token: str
     refresh_token: str | None
     expires_at: datetime | None
-
-
-from urllib.parse import urlencode
 
 
 class GithubService:

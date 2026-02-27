@@ -46,13 +46,15 @@ def test_github_tokens_dataclass():
 
 
 def test_get_auth_url(github_service, mock_settings):
+    from urllib.parse import quote
+
     user_id = 123
     url = github_service.get_auth_url(user_id)
 
     assert "github.com/login/oauth/authorize" in url
     assert f"client_id={mock_settings.github_client_id}" in url
-    assert f"redirect_uri={mock_settings.github_redirect_uri}" in url
-    assert f"state={user_id}" in url
+    assert f"redirect_uri={quote(mock_settings.github_redirect_uri, safe='')}" in url
+    assert f"state=github_{user_id}" in url
     assert "scope=repo+admin%3Arepo_hook" in url or "scope=repo admin:repo_hook" in url
 
 

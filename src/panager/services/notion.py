@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from urllib.parse import urlencode
 
 import asyncpg
 import httpx
@@ -22,9 +23,6 @@ class NotionTokens:
     workspace_id: str | None
     workspace_name: str | None
     bot_id: str | None
-
-
-from urllib.parse import urlencode
 
 
 class NotionService:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 import logging
-from typing import TYPE_CHECKING, TypedDict, NotRequired, Any
+from typing import TYPE_CHECKING, TypedDict, NotRequired
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, AnyMessage
 from langgraph.graph import END, START, StateGraph
