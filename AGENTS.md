@@ -3,12 +3,13 @@
 ## CRITICAL GUIDELINES
 
 1. **Single Message Policy**: All responses must be provided by **editing** the initial "Thinking..." message. Never create duplicate messages. (Refer to [UX Standards Section 1](#1-single-message-policy))
-2. **Real-time Visibility**: While the user is waiting, the agent's internal state must be updated and shown in real-time (e.g., `Analyzing intent...` > `Searching for tools...` > `Executing tool: ~...`). (Refer to [UX Standards Section 2](#2-step-by-step-visibility))
+2. **Real-time Visibility**: While the user is waiting, the agent's internal state must be updated and shown in real-time (e.g., `Analyzing intent...` > `Executing tool: ~...`). (Refer to [UX Standards Section 2](#2-step-by-step-visibility))
 3. **Streaming**: The AI's final response must be streamed character by character. (Refer to [UX Standards Section 3](#3-streaming-and-finalization))
 4. **No Emoji**: Do not use emojis in status messages or any response text. (Refer to [UX Standards Section 3](#3-streaming-and-finalization))
 5. **JSON Return**: All tools MUST return a **JSON-formatted string**. (Refer to [Tool Development Section](#tool-development-critical))
-6. **Absolute Paths**: Always use absolute paths, including the project root, when reading or writing files. (Refer to [Python & Style Section](#python--style))
-7. **Conventional Commits**: Commit messages must be written in Korean and strictly follow the specification. (Refer to [Workflow & Commits Section](#workflow--commits))
+6. **Strict Typing**: **MANDATORY**: Never use `Any`. Define every input/output using `TypedDict` or Pydantic `BaseModel`. (Refer to [Python & Style Section](#python--style))
+7. **Absolute Paths**: Always use absolute paths, including the project root, when reading or writing files. (Refer to [Python & Style Section](#python--style))
+8. **Conventional Commits**: Commit messages must be written in Korean and strictly follow the specification. (Refer to [Workflow & Commits Section](#workflow--commits))
 
 ---
 
@@ -17,7 +18,7 @@ This guide provides the necessary context and standards for agentic coding agent
 ---
 
 ## Project Index & Overview
-- **Core:** Discord DM bot (personal manager) using **LangGraph Multi-Agent** logic.
+- **Core:** Discord DM bot (personal manager) using **LangGraph Single-Agent** logic.
 - **Goal:** Support 100+ tools with complex cross-domain (composite) task execution.
 - **Stack:** Python 3.13+, `uv`, PostgreSQL (`pgvector`), Google/GitHub/Notion APIs.
 - **Entrypoint:** `uv run python -m panager.main`
@@ -30,10 +31,10 @@ This guide provides the necessary context and standards for agentic coding agent
 └── src/panager/
     ├── main.py             # Composition Root & App Entrypoint
     ├── agent/              # Modular & Semantic Discovery Logic
-    │   ├── workflow.py     # Main StateGraph (Discovery -> Planner -> Executor)
-    │   ├── supervisor.py   # Dynamic Planner (LLM-based task orchestration)
+    │   ├── workflow.py     # Main StateGraph (Discovery -> Agent -> Executor)
+    │   ├── agent.py        # Central Agent Logic (Tool Calling & Response)
     │   ├── registry.py     # ToolRegistry & Semantic Search (pgvector)
-    │   └── state.py        # AgentState (TypedDict with add_messages)
+    │   └── state.py        # AgentState (TypedDict with Pydantic Models)
     ├── tools/              # Domain-specific Tools (e.g., google.py, github.py)
     ├── services/           # Business Logic Layer (API Wrappers & Token Mgmt)
     ├── integrations/       # Low-level API Clients
@@ -64,6 +65,12 @@ This guide provides the necessary context and standards for agentic coding agent
 - `make migrate-test`: Run database migrations on the test DB.
 
 ### Testing (Pytest)
+To run all tests and check coverage (Goal: **90%+**):
+```bash
+# 전체 테스트 및 커버리지 측정
+uv run pytest --cov=src/panager tests/
+```
+
 To run a specific test file or a single test case:
 ```bash
 # Run a specific test file
@@ -73,14 +80,6 @@ uv run pytest tests/test_main_logic.py
 uv run pytest tests/test_main_logic.py::test_some_function
 ```
 
-### Discord Direct Testing
-When testing via Discord DM:
-1. Ensure the bot is running (`make dev`).
-2. Send a message to the bot in Discord.
-3. Check logs for real-time execution details:
-   - If running via `make dev`, logs appear in the terminal.
-   - If running via Docker, use `make dev-logs`.
-
 ---
 
 ## Coding Standards & Tool Development
@@ -88,22 +87,17 @@ When testing via Discord DM:
 ### Python & Style
 - **Imports**: Always include `from __future__ import annotations` at the top of every Python file for postponed evaluation of annotations.
 - **Formatting**: Use `ruff` for linting and formatting. Adhere to the project's `.ruff.toml` if present.
-- **Naming**:
-  - `snake_case` for variables, functions, and modules.
-  - `PascalCase` for classes.
-  - Constants should be `UPPER_SNAKE_CASE`.
-- **Types**: Mandatory type annotations for all function signatures and complex variables. Use `| None` for optional types (e.g., `str | None`) rather than `Optional[str]`.
-- **Paths**: **CRITICAL**: Always use absolute paths for file I/O. Use the project root directory as a base. (Refer to Critical Guideline 6)
+- **Naming**: `snake_case` for variables/functions, `PascalCase` for classes.
+- **Strict Typing**: **MANDATORY**: Avoid `Any`.
+    - Use `TypedDict` for node outputs.
+    - Use Pydantic `BaseModel` for complex structured data (e.g., `DiscoveredTool`, `PendingReflection`).
+- **Paths**: Always use absolute paths for file I/O. Use the project root directory as a base.
 
 ### <a name="tool-development-critical"></a>Tool Development (CRITICAL)
-- **Location**: Place all new tools in `src/panager/tools/` using domain-specific filenames (e.g., `google.py`, `github.py`).
+- **Location**: Place all new tools in `src/panager/tools/`.
 - **Decorator**: Every tool must be decorated with `@tool` from `langchain_core.tools`.
-- **Return Type**: **MANDATORY**: Every tool MUST return a **JSON-formatted string**. Do not return raw objects, dictionaries, or plain text unless it's strictly required by the caller. This ensures compatibility with the agent's observation handling. (Refer to Critical Guideline 5)
-- **Documentation**: Provide clear, descriptive docstrings for every tool, explaining parameters and return values.
-
-### Error Handling & Logging
-- **Exceptions**: Use specialized exception classes defined in `src/panager/core/exceptions.py`.
-- **Logging**: Use the project-wide logger. Avoid `print()` statements; use `logger.info()`, `logger.error()`, etc., to provide visibility into agent execution.
+- **Return Type**: **MANDATORY**: Every tool MUST return a **JSON-formatted string**.
+- **OAuth Safety**: External OAuth `state` parameters MUST include a domain prefix (e.g., `notion_`, `github_`) to force string type recognition by external APIs.
 
 ---
 
@@ -111,101 +105,55 @@ When testing via Discord DM:
 
 ### Git Workflow
 - **Branching**: All development should occur on feature branches branching off the `dev` branch.
-- **Commits**: Strictly follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. (Refer to Critical Guideline 7)
+- **Commits**: Strictly follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
   - **Subject**: **MANDATORY** Korean (e.g., `feat: 구글 캘린더 도구 추가`).
-  - **Body**: **MANDATORY** Korean description of the changes (e.g., `구글 캘린더 도구를 추가하고 OAuth2 인증 흐름을 구현함.`).
-  - **Format**:
-    ```text
-    <type>(<scope>): <subject>
-
-    <body>
-    ```
-
-### Conventional Commit Types
-- `feat`: A new feature
-- `fix`: A bug fix
-- `docs`: Documentation only changes
-- `style`: Changes that do not affect the meaning of the code (formatting, white-space, etc)
-- `refactor`: A code change that neither fixes a bug nor adds a feature
-- `perf`: A code change that improves performance
-- `test`: Adding missing tests or correcting existing tests
-- `chore`: Changes to the build process or auxiliary tools and libraries
+  - **Body**: **MANDATORY** Korean description of the changes.
 
 ---
 
 ## Agent State Management
 
 ### LangGraph AgentState
-- **Definition**: The global state is managed via the `AgentState` TypedDict in `src/panager/agent/state.py`.
-- **Message Handling**: Use `Annotated[list[AnyMessage], add_messages]` for the `messages` key. This ensures that new messages from nodes are appended to the existing history.
-- **Cross-Node Communication**:
-  - Nodes should only modify the fields they are responsible for.
-  - Use `NotRequired` for optional fields to keep the state clean.
-  - Key fields include `user_id`, `username`, `messages`, and `memory_context`.
+- **Definition**: Managed via `AgentState` in `src/panager/agent/state.py`.
+- **Message Handling**: Use `Annotated[list[AnyMessage], add_messages]` for `messages`.
+- **Data Models**: Use Pydantic models for structured lists to ensure type safety during LLM interactions.
 
-### Persistence & thread_id
-- **Thread IDs**: Every conversation with a user must be associated with a unique `thread_id` (Discord Channel ID).
-- **Checkpointers**: We use `PostgresSaver` to persist the state of each thread. This allows the agent to remember context across restarts.
-- **Resuming**: When a user sends a new message, the `thread_id` is used to load the previous state, ensuring the LLM has access to history.
-
-### Node Best Practices
-1. **Idempotency**: Ensure that nodes can be re-run safely if an error occurs.
-2. **State Cleanup**: Always clear transient flags (e.g., `is_system_trigger`) once consumed.
-3. **Observation Handling**: Tools MUST return JSON strings, which are then added to the state as `ToolMessage` objects. (Refer to Critical Guideline 5)
+### Persistence & Resumption
+- **Thread IDs**: Associated with unique Discord Channel IDs.
+- **Checkpointers**: Uses `PostgresSaver` for persistence.
+- **Auto-Resumption**:
+    1. Auth interrupt occurs -> `auth_message_id` and `auth_request_url` are saved to state.
+    2. OAuth callback received -> `PanagerBot` calls `astream(None, config=config)`.
+    3. Graph resumes exactly from the interrupted point.
 
 ---
 
 ## UX and Discord Interaction Standards
 
 ### <a name="1-single-message-policy"></a>1. Single Message Policy
-- **Principle**: The bot leaves exactly **one message** in response to a single user input. (Refer to Critical Guideline 1)
-- **Method**: Send an initial "Thinking..." message, and reflect all subsequent state changes and AI responses by **editing** that message.
+- **Principle**: The bot leaves exactly **one message** in response to a single user input.
+- **Method**: Send an initial "Thinking..." message, and reflect all subsequent state changes by **editing** that message.
 
 ### <a name="2-step-by-step-visibility"></a>2. Step-by-Step Visibility
-- Share the agent's working steps with the user in real-time to increase transparency. (Refer to Critical Guideline 2)
 - **Status Message Guide**:
-  - `discovery`: "Analyzing intent..."
-  - `supervisor`: "Searching for relevant tools and planning..."
-  - `tool_executor`: "Executing tool: `{tool_name}`..."
-  - `auth_interrupt`: "Security authentication is required."
+  - `discovery`: "의도를 파악하고 있습니다..."
+  - `agent`: "관련 도구를 검색하고 계획을 세우는 중입니다..."
+  - `tool_executor`: "도구 실행 중: `{tool_name}`..."
+  - `auth_interrupt`: "보안 인증이 필요합니다."
 
 ### <a name="3-streaming-and-finalization"></a>3. Streaming and Finalization
-- LLM's text response (`AIMessageChunk`) is streamed immediately upon receipt to provide a live feel. (Refer to Critical Guideline 3)
-- Tool execution results or authentication links naturally combine at the end of the response.
-- Remove UI elements (cursor, etc.) indicating the "Thinking" state once the final response is complete.
-- **No Emoji**: Do not use emojis in status messages or any response text. (Refer to Critical Guideline 4)
+- LLM's text response is streamed character by character.
+- **State Clearing**: Upon successful completion, nodes MUST clear `auth_request_url` and `auth_message_id` to prevent legacy UI elements from appearing.
 
 ---
 
 ## Advanced Patterns
 
-### Auth Interrupt
-- **HITL (Human-In-The-Loop)**: If an authentication exception such as `GoogleAuthRequired` occurs during tool execution, call LangGraph's `interrupt` function to pause the graph.
-- **Flow**: The agent should not catch the exception directly but throw it up; the `auth_interrupt` node detects this, sends the authentication URL to the user, and waits for approval.
+### Auth Interrupt & Resume
+- **Mechanism**: Use LangGraph's `interrupt()` to pause execution for OAuth.
+- **Resume Mode**: Pass `None` as the input state to `astream` to resume from the last checkpoint.
+- **Single Message UX**: Use the saved `auth_message_id` to fetch and edit the existing authentication link message into the final result.
 
-### Tool Metadata and Search
-- **Domain Metadata**: Every tool must specify a domain, e.g., `@tool(..., metadata={"domain": "google"})`.
-- **Role**: This metadata is used as a key identifier for semantic search filtering in the `discovery_node` and authentication URL routing in the `tool_executor`.
-
-### Scheduler Convention
-- **Trigger Prefix**: Messages triggered by the scheduler have a `[SCHEDULED_EVENT]` prefix.
-- **Discovery**: The `discovery_node` removes this prefix before performing a tool search, ensuring that tool search works correctly even for automated tasks.
-
-### Async SDK Handling (asyncio.to_thread)
-- **Blocking SDK**: When calling synchronous external SDKs like Google or GitHub, you must use `asyncio.to_thread()` to prevent blocking the event loop.
-
----
-
-## CI/CD & Deployment
-
-### GitHub Actions Pipeline
-- **Dev Pipeline (`dev.yml`)**: Pushing to the `dev` branch automatically triggers the `Lint (Ruff) -> Test (Pytest) -> Build -> Deploy` process.
-- **Test DB**: In the CI environment, a dedicated PostgreSQL service container with `pgvector` is used for actual DB integration testing.
-
-### Deployment Method
-- **Tailscale**: Connect to the deployment server via Tailscale for private network security.
-- **Registry**: Built images are stored in `ghcr.io` (GitHub Container Registry)에 저장되며, 서버에서 `docker compose pull`을 통해 업데이트됩니다.
-- **Model Init**: Language model initialization and weight management are handled by a separate image via `Dockerfile.model`.
-
-### Pull Request Rules
-- **Template**: When creating a PR, you must follow the format in `.github/PULL_REQUEST_TEMPLATE.md` and record changes, test results, screenshots, etc., in detail.
+### GitHub Push Reflection
+- **Webhook**: Receive push event -> Convert payload to `PendingReflection` (Pydantic) -> Trigger agent task.
+- **Prompting**: Keep the trigger command simple; let the agent read the structured data from the `AgentState`.
