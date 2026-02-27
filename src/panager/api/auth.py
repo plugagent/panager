@@ -47,7 +47,9 @@ async def github_login(request: Request, user_id: int):
 @router.get("/github/callback")
 async def github_callback(request: Request, code: str, state: str):
     try:
-        user_id = int(state)
+        # github_ 접두사 제거
+        user_id_str = state.replace("github_", "")
+        user_id = int(user_id_str)
         bot = request.app.state.bot
         await bot.github_service.exchange_code(code, user_id)
 
@@ -78,7 +80,9 @@ async def notion_login(request: Request, user_id: int):
 @router.get("/notion/callback")
 async def notion_callback(request: Request, code: str, state: str):
     try:
-        user_id = int(state)
+        # notion_ 접두사 제거
+        user_id_str = state.replace("notion_", "")
+        user_id = int(user_id_str)
         bot = request.app.state.bot
         await bot.notion_service.exchange_code(code, user_id)
 

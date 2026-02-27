@@ -41,7 +41,7 @@ class NotionService:
             "redirect_uri": self.settings.notion_redirect_uri,
             "response_type": "code",
             "owner": "user",
-            "state": str(user_id),
+            "state": f"notion_{user_id}",
         }
         return f"https://api.notion.com/v1/oauth/authorize?{urlencode(params)}"
 

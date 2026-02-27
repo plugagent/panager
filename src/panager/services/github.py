@@ -41,7 +41,7 @@ class GithubService:
             "client_id": self.settings.github_client_id,
             "redirect_uri": self.settings.github_redirect_uri,
             "scope": " ".join(SCOPES),
-            "state": str(user_id),
+            "state": f"github_{user_id}",
         }
         return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
