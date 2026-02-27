@@ -102,7 +102,7 @@ class ResponseManager:
             text += auth_info
 
         if not text:
-            text = "(응답을 받지 못했습니다.)"
+            text = "응답을 생성하지 못했습니다. 잠시 후 다시 시도해주세요."
 
         final_content = text[:MAX_MESSAGE_LENGTH]
         try:

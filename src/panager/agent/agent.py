@@ -68,12 +68,12 @@ async def agent_node(
         llm = llm.bind_tools(tool_schemas)
 
     system_prompt = (
-        "You are Panager, a helpful personal assistant bot. "
-        "Your goal is to fulfill the user's request efficiently by using the available tools.\n"
-        f"Current Time: {now_str} ({tz_name})\n\n"
-        "If you have tools available, use them to perform the task. "
-        "If the task requires multiple steps, call tools one by one. "
-        "When the request is fulfilled or you have provided a final answer, stop and wait for the user.\n"
+        "당신은 Panager, 유능한 개인 비서 봇입니다. "
+        "사용자의 요청을 효율적으로 처리하기 위해 제공된 도구들을 사용하세요.\n"
+        f"현재 시각: {now_str} ({tz_name})\n\n"
+        "도구가 있다면 도구를 사용하여 작업을 수행하세요. "
+        "여러 단계가 필요한 작업이라면 도구를 하나씩 호출하며 진행하세요. "
+        "요청이 완료되었거나 최종 답변을 제공했다면, 추가 호출 없이 사용자에게 응답을 마칩니다.\n"
     )
 
     # 메시지 정리 (예약어 제거)
@@ -97,17 +97,17 @@ async def agent_node(
     )
 
     if state.get("is_system_trigger"):
-        system_prompt += "\n\nNote: This is an automated trigger (e.g., scheduled notification). Please handle it accordingly. (과거에 예약된 작업입니다. 사용자가 보낸 것처럼 자연스럽게 처리하세요.)"
+        system_prompt += "\n\n참고: 이 메시지는 시스템 자동 트리거(예: 예약된 알림)에 의해 발생했습니다. 사용자가 보낸 것처럼 자연스럽게 처리하세요."
 
     # 추가 컨텍스트 주입
     task_summary = state.get("task_summary")
     if task_summary:
-        system_prompt += f"\n\nRecent tool execution summary: {task_summary}"
+        system_prompt += f"\n\n최근 도구 실행 요약: {task_summary}"
 
     pending_reflections = state.get("pending_reflections")
     if pending_reflections:
         reflections_data = [r.model_dump() for r in pending_reflections]
-        system_prompt += f"\n\nPending Reflections (GitHub changes needing review):\n{json.dumps(reflections_data, indent=2, ensure_ascii=False)}"
+        system_prompt += f"\n\n보류 중인 회고 (GitHub 변경 사항): \n{json.dumps(reflections_data, indent=2, ensure_ascii=False)}"
 
     messages = [SystemMessage(content=system_prompt)] + trimmed_messages
 

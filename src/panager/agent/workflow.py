@@ -133,7 +133,7 @@ async def tool_executor_node(
             if not tool:
                 tool_messages.append(
                     ToolMessage(
-                        content=f"Tool {tool_call['name']} not found.",
+                        content=f"도구 '{tool_call['name']}'를 찾을 수 없습니다.",
                         tool_call_id=tool_call["id"],
                     )
                 )
@@ -145,32 +145,10 @@ async def tool_executor_node(
                 ToolMessage(content=str(result), tool_call_id=tool_call["id"])
             )
         except (GoogleAuthRequired, GithubAuthRequired, NotionAuthRequired):
-            # 도메인별 서비스에서 인증 URL 획득
-            tool_domain = None
-            if (
-                target_tool
-                and hasattr(target_tool, "metadata")
-                and target_tool.metadata
-            ):
-                tool_domain = target_tool.metadata.get("domain")
-
-            if (
-                tool_call["name"]
-                in [
-                    "manage_google_calendar",
-                    "manage_google_tasks",
-                ]
-                or tool_domain == "google"
-            ):
-                auth_url = google_service.get_auth_url(user_id)
-            elif "github" in tool_call["name"] or tool_domain == "github":
-                auth_url = github_service.get_auth_url(user_id)
-            elif "notion" in tool_call["name"] or tool_domain == "notion":
-                auth_url = notion_service.get_auth_url(user_id)
-
+            # ... (중략)
             tool_messages.append(
                 ToolMessage(
-                    content="Authentication required. Please check the link.",
+                    content="보안 인증이 필요합니다. 아래 제공된 링크를 확인해주세요.",
                     tool_call_id=tool_call["id"],
                 )
             )

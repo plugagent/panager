@@ -311,7 +311,7 @@ async def test_agent_node_system_trigger_adds_instruction(mock_services, mock_se
     assert len(captured_messages) >= 1
     system_msg = captured_messages[0]
     assert isinstance(system_msg, SystemMessage)
-    assert "과거에 예약된 작업입니다" in system_msg.content
+    assert "시스템 자동 트리거" in system_msg.content
 
 
 @pytest.mark.asyncio

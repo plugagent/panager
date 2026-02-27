@@ -85,8 +85,8 @@ async def test_agent_node_handling_system_trigger(mock_settings, mock_session_pr
         await agent_node(state, mock_settings, mock_session_provider)
 
     system_msg = next(m for m in captured_messages if isinstance(m, SystemMessage))
-    assert "automated trigger" in system_msg.content
-    assert "과거에 예약된 작업입니다" in system_msg.content
+    assert "시스템 자동 트리거" in system_msg.content
+    assert "자연스럽게 처리하세요" in system_msg.content
 
 
 @pytest.mark.asyncio
@@ -128,7 +128,7 @@ async def test_agent_node_handling_pending_reflections(
         await agent_node(state, mock_settings, mock_session_provider)
 
     system_msg = next(m for m in captured_messages if isinstance(m, SystemMessage))
-    assert "Pending Reflections" in system_msg.content
+    assert "보류 중인 회고" in system_msg.content
     assert "owner/repo" in system_msg.content
 
 
@@ -241,7 +241,7 @@ async def test_agent_node_with_task_summary(mock_settings, mock_session_provider
         await agent_node(state, mock_settings, mock_session_provider)
 
     assert any(
-        "Recent tool execution summary: Previous work done" in m.content
+        "최근 도구 실행 요약: Previous work done" in m.content
         for m in captured_messages
         if isinstance(m, SystemMessage)
     )
