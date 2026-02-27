@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 class AuthInterruptOutput(TypedDict):
-    """Output for the auth_interrupt node."""
+    """인증 인터럽트 노드의 출력 타입."""
 
     auth_request_url: None
 
@@ -95,7 +95,7 @@ async def discovery_node(
 
 
 class ToolExecutorOutput(TypedDict):
-    """Output for the tool_executor node."""
+    """도구 실행 노드의 출력 타입."""
 
     messages: list[AnyMessage]
     auth_request_url: NotRequired[str | None]
@@ -125,7 +125,6 @@ async def tool_executor_node(
 
     tool_messages: list[AnyMessage] = []
     auth_url: str | None = None
-    target_tool = None
 
     for tool_call in last_message.tool_calls:
         try:
@@ -139,13 +138,19 @@ async def tool_executor_node(
                 )
                 continue
 
-            target_tool = tool
             result = await tool.ainvoke(tool_call["args"])
             tool_messages.append(
                 ToolMessage(content=str(result), tool_call_id=tool_call["id"])
             )
-        except (GoogleAuthRequired, GithubAuthRequired, NotionAuthRequired):
-            # ... (중략)
+        except (GoogleAuthRequired, GithubAuthRequired, NotionAuthRequired) as exc:
+            # 도메인별 서비스에서 인증 URL 획득
+            if isinstance(exc, GoogleAuthRequired):
+                auth_url = google_service.get_auth_url(user_id)
+            elif isinstance(exc, GithubAuthRequired):
+                auth_url = github_service.get_auth_url(user_id)
+            elif isinstance(exc, NotionAuthRequired):
+                auth_url = notion_service.get_auth_url(user_id)
+
             tool_messages.append(
                 ToolMessage(
                     content="보안 인증이 필요합니다. 사용자에게 전송된 인증 링크를 확인하세요.",
@@ -203,8 +208,6 @@ def build_graph(
         if next_worker == "FINISH" or not next_worker:
             return END
 
-        # 에이전트가 종료되지 않았으면 다시 discovery(또는 바로 agent)로 보낼 수 있지만
-        # 보통은 도구 호출이 없으면 종료하는 것이 안전
         return END
 
     graph.add_conditional_edges("agent", _route)

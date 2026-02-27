@@ -74,7 +74,7 @@ async def test_tool_executor_node_tool_not_found():
 
     assert len(result["messages"]) == 1
     assert isinstance(result["messages"][0], ToolMessage)
-    assert "not found" in result["messages"][0].content
+    assert "찾을 수 없습니다" in result["messages"][0].content
 
 
 @pytest.mark.asyncio

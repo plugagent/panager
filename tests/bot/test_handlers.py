@@ -78,7 +78,9 @@ async def test_stream_empty_response_sends_fallback():
     await _stream_agent_response(mock_graph, state, config, mock_channel)
 
     # 빈 스트림 → fallback 텍스트로 edit
-    sent_message.edit.assert_called_with(content="(응답을 받지 못했습니다.)")
+    sent_message.edit.assert_called_with(
+        content="응답을 생성하지 못했습니다. 잠시 후 다시 시도해주세요."
+    )
 
 
 @pytest.mark.asyncio

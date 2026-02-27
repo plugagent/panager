@@ -111,4 +111,4 @@ async def test_tool_executor_handles_auth_interrupt(mock_pool, settings):
 
     assert result["auth_request_url"] == "http://google-auth"
     assert result["messages"][0].tool_call_id == "1"
-    assert "Authentication required" in result["messages"][0].content
+    assert "보안 인증이 필요합니다" in result["messages"][0].content
