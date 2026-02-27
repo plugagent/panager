@@ -24,6 +24,9 @@ class NotionTokens:
     bot_id: str | None
 
 
+from urllib.parse import urlencode
+
+
 class NotionService:
     """Notion 서비스 관리를 위한 중앙 서비스."""
 
@@ -40,8 +43,7 @@ class NotionService:
             "owner": "user",
             "state": str(user_id),
         }
-        query_string = "&".join(f"{k}={v}" for k, v in params.items())
-        return f"https://api.notion.com/v1/oauth/authorize?{query_string}"
+        return f"https://api.notion.com/v1/oauth/authorize?{urlencode(params)}"
 
     async def exchange_code(self, code: str, user_id: int) -> dict:
         """OAuth 인증 코드를 토큰으로 교환합니다."""
