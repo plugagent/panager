@@ -148,7 +148,7 @@ async def tool_executor_node(
             # ... (중략)
             tool_messages.append(
                 ToolMessage(
-                    content="보안 인증이 필요합니다. 아래 제공된 링크를 확인해주세요.",
+                    content="보안 인증이 필요합니다. 사용자에게 전송된 인증 링크를 확인하세요.",
                     tool_call_id=tool_call["id"],
                 )
             )
