@@ -29,6 +29,8 @@ class AgentNodeOutput(TypedDict):
 
     messages: list[AnyMessage]
     timezone: str
+    auth_request_url: NotRequired[None]
+    auth_message_id: NotRequired[None]
     # next_worker is kept for legacy compatibility if needed, but will be set to FINISH
     next_worker: NotRequired[str]
 
@@ -115,6 +117,8 @@ async def agent_node(
     res: AgentNodeOutput = {
         "timezone": tz_name,
         "messages": [response],
+        "auth_request_url": None,
+        "auth_message_id": None,
     }
 
     # 도구 호출이 없으면 종료로 간주

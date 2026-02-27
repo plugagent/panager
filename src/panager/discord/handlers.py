@@ -169,6 +169,11 @@ async def _stream_agent_response(
     try:
         state_snapshot = await graph.aget_state(config)
         auth_url = state_snapshot.values.get("auth_request_url")
+        log.debug(
+            "Finalizing stream. next_nodes=%s, auth_url_present=%s",
+            state_snapshot.next,
+            bool(auth_url),
+        )
 
         # 그래프가 완료(END)된 상태라면 인증 URL이 있어도 무시 (잔여 데이터 방지)
         if not state_snapshot.next:
@@ -179,6 +184,9 @@ async def _stream_agent_response(
             await graph.update_state(
                 config, {"auth_message_id": ui.main_msg.id}, as_node="agent"
             )
+        elif not auth_url:
+            # 인증이 더 이상 필요 없으면 메시지 ID 정보도 클리어
+            await graph.update_state(config, {"auth_message_id": None}, as_node="agent")
     except Exception:
         log.warning("상태 스냅샷 조회 또는 업데이트 실패", exc_info=True)
 
