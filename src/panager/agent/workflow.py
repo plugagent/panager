@@ -172,10 +172,7 @@ async def tool_executor_node(
             )
             break
 
-    res: ToolExecutorOutput = {"messages": tool_messages}
-    if auth_url:
-        res["auth_request_url"] = auth_url
-
+    res: ToolExecutorOutput = {"messages": tool_messages, "auth_request_url": auth_url}
     return res
 
 

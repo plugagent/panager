@@ -170,6 +170,10 @@ async def _stream_agent_response(
         state_snapshot = await graph.aget_state(config)
         auth_url = state_snapshot.values.get("auth_request_url")
 
+        # 그래프가 완료(END)된 상태라면 인증 URL이 있어도 무시 (잔여 데이터 방지)
+        if not state_snapshot.next:
+            auth_url = None
+
         # 인증이 필요한 경우, 현재 메시지 ID를 상태에 저장 (나중에 Resume 시 사용)
         if auth_url and ui.main_msg:
             await graph.update_state(
