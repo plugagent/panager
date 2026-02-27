@@ -61,7 +61,11 @@ async def discovery_node(
     state: AgentState, registry: ToolRegistry
 ) -> dict[str, list[DiscoveredTool]]:
     """사용자 메시지를 기반으로 관련 도구를 검색합니다."""
-    last_msg = state["messages"][-1]
+    messages = state.get("messages", [])
+    if not messages:
+        return {"discovered_tools": []}
+
+    last_msg = messages[-1]
     if not isinstance(last_msg, HumanMessage) or not last_msg.content:
         return {"discovered_tools": []}
 
